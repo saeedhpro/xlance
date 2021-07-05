@@ -1,0 +1,14 @@
+{
+    "platform": "laravel",
+    "app": "apixlance",
+    "disks": [
+        {
+            "name": "xlancedata",
+            "mountTo": "storage"
+        }
+    ],
+    "laravel": {
+        "configCache": true,
+        "routeCache": true
+    }
+}
