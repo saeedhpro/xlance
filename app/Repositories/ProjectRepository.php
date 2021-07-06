@@ -109,7 +109,7 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
         /** @var Project $project */
         $project = $this->findOneOrFail($id);
         /** @var Request $request */
-        $request = $project->selectedRequest()->first()->get();
+        $request = Request::findOrFail($project->selected_request_id);
         if($request) {
             $payments = SecurePayment::where('request_id', '=', $request->id)
                 ->where('status', '=', SecurePayment::CREATED_STATUS)->get();

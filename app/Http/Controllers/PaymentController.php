@@ -8,6 +8,7 @@ use App\Models\PaymentHistory;
 use App\Models\Project;
 use App\Models\RequestPackage;
 use App\Models\SecurePayment;
+use App\Models\SelectedPlan;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\Carbon;
@@ -75,19 +76,13 @@ class PaymentController extends Controller
                 $user = $t->user;
                 $monthly = $t->is_monthly;
                 $package = $t->package;
-//                $count = $monthly ? 1 : 12;
-                $user->update([
-                    'request_package_id' => $package->id,
-                    'package_expire_date' => $package->number ? Carbon::now()->addMonth()->addSecond() : Carbon::now()->addYear()->addSecond(),
+                $lastPlan = SelectedPlan::where('user_id', '=', $user->id)
+                    ->last();
+                $user->selectedPlans()->create([
+                    'start_date' => Carbon::createFromTimestamp($lastPlan->end_date)->addDay(),
+                    'end_date' => $monthly ? Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addMonth() : Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addYear(),
                     'number' => $package->number,
                 ]);
-//                for ($i = 0; $i < $count; $i++) {
-//                    $user->selectedPlans()->create([
-//                        'start_date' => Carbon::now()->addMonths($i)->addSecond(),
-//                        'end_date' => Carbon::now()->addMonths($i + 1),
-//                        'number' => $package->number,
-//                    ]);
-//                }
                 /** @var Wallet $wallet */
                 $wallet = $user->wallet;
                 $wallet->forceWithdraw((int) $t->price);

@@ -387,7 +387,10 @@ class ProjectController extends Controller
         /** @var Project $project */
         $project = $this->projectRepository->findOneOrFail($id);
         if($auth->can('finish-project', $project)) {
-            $count = SecurePayment::all()->where('project_id', '=', $project->id)->filter(function (SecurePayment $p) {
+            $request = ProjectRequest::findOrFail($project->selected_request_id);
+            $count = SecurePayment::all()->where('project_id', '=', $project->id)
+                ->where('request_id', '=', $request->id)
+                ->filter(function (SecurePayment $p) {
                return $p->status == SecurePayment::CREATED_STATUS ||
                    $p->status == SecurePayment::ACCEPTED_STATUS ||
                    $p->status == SecurePayment::PAYED_STATUS;

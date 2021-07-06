@@ -99,16 +99,39 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(SelectedPlan::class);
     }
 
+    public function selectedPlan()
+    {
+        $this->deleteOldPlans();
+        return $this->selectedPlans()->where('start_date', '>', Carbon::now())->where('end_date', '<=', Carbon::now())->first();
+    }
+
+    public function getNumber()
+    {
+        return $this->selectedPlan() ? $this->selectedPlan()->number : 0;
+    }
+
+    public function requestsCount()
+    {
+        /** @var SelectedPlan $plan */
+        $plan = $this->selectedPlan();
+        if($plan) {
+            $count = RequestPackage::where('user_id', '=', $this->id)
+                ->where('created_at', '>', $plan->start_date)
+                ->where('created_at', '<=', $plan->end_date)
+                ->count();
+            if($this->getNumber() - $count == 0) {
+                $plan->forceDelete();
+                return 0;
+            } else {
+                return $count;
+            }
+        }
+        return 0;
+    }
+
     public function histories()
     {
         return $this->hasMany(PaymentHistory::class);
-    }
-
-    public function selectedPlan()
-    {
-        $selectedPlan = $this->selectedPlans()->where('start_date', '>', Carbon::now())->where('end_date', '<=', Carbon::now())->first();
-        $this->deleteOldPlans();
-        return $selectedPlan;
     }
 
     public function deleteOldPlans()
@@ -367,6 +390,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function requestPackage()
     {
         return $this->belongsTo(RequestPackage::class, 'request_package_id', 'id');
+    }
+
+    public function getPackage()
+    {
+        return $this->selectedPlan();
     }
 
     public function sentChangePriceRequests()

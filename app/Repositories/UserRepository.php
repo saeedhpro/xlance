@@ -603,7 +603,10 @@ class UserRepository extends BaseRepository implements UserInterface
             /** @var ProjectRequest $req */
             $req = $freelancerRequest->request;
             $freelancerRequest->forceDelete();
-            $req->forceDelete();
+            $req->update([
+                'status' => ProjectRequest::REJECTED_STATUS,
+            ]);
+            $req->securePayments()->delete();
             if($project->selected_request_id == $req->id) {
                 $project->update([
                     'selected_request_id' => null,

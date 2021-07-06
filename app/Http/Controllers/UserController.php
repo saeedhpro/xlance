@@ -59,6 +59,7 @@ use App\Models\Request;
 use App\Models\RequestPackage;
 use App\Models\ResetPassword;
 use App\Models\SecurePayment;
+use App\Models\SelectedPlan;
 use App\Models\Setting;
 use App\Models\Skill;
 use App\Models\Transaction;
@@ -535,15 +536,14 @@ class UserController extends Controller
         $auth = auth()->user();
         /** @var Project $project */
         $project = Project::findOrFail($sendRequestForProjectRequest->project_id);
-        $project_ids = $auth->sentRequests()->pluck('project_id')->toArray();
-        $c = true;
-        if(in_array($project->id, $project_ids)){
-            $c = false;
-        }
-        if(!$c) {
+        $count = Request::where('user_id', '=', $auth->id)
+            ->where('status', '!=', Request::REJECTED_STATUS)
+            ->where('project_id', '=', $project->id)
+            ->count();
+        if($count != 0) {
             return response()->json(['errors' => ['project' => ['شما قبلا برای این پروژه درخواست ثبت کرده اید!']]], 422);
         }
-        if($auth->number == 0) {
+        if($auth->getNumber() - $auth->requestsCount() == 0) {
             return response()->json(['errors' => ['project' => ['تعداد درخواست های شما تمام شده است. برای ارسال درخواست پلن جدید تهیه کنید!']]], 422);
         }
         if($auth->id === $project->employer->id) {
@@ -627,13 +627,18 @@ class UserController extends Controller
     {
         /** @var User $auth */
         $auth = auth()->user();
-        if($auth->can('accept-or-reject-request-for-project', $request)) {
-            $project = $request->project;
-            $request = $this->userRepository->authAcceptOrRejectProjectRequest($projectRequest, $project, $request);
-            return new RequestResource($request);
-        } else {
-            return $this->accessDeniedResponse();
+        $project = $request->project;
+        if($project->acceptFreelancerRequest()->count() != 0) {
+            return response()->json(['errors' => ['freelancer' => ['شما قبلا درخواست یک فریلنسر دیگر را پذیرفته اید']]], 422);
         }
+        if($project->selected_request_id == null) {
+            return response()->json(['errors' => ['project' => ['پروژه در حال انجام است']]], 422);
+        }
+        if($auth->id == $project->employer->id) {
+            return response()->json(['errors' => ['employer' => ['شما کارفرمای پروژه نیستید']]], 422);
+        }
+        $request = $this->userRepository->authAcceptOrRejectProjectRequest($projectRequest, $project, $request);
+        return new RequestResource($request);
     }
 
     public function freelancerGetAcceptProjectRequest(Project $project, AcceptFreelancerRequest $accept)
@@ -834,7 +839,7 @@ class UserController extends Controller
         $user = auth()->user();
         $balance = $user->wallet->balance;
         /** @var RequestPackage $package */
-        $package = RequestPackage::find($request->get('package_id'));
+        $package = RequestPackage::findOrFail($request->get('package_id'));
         $monthly = $request->get('monthly');
         $yearlyPrice = 12 * (int) $package->price - ((12 * (int) $package->price) * 20 / 100) ;
         $monthlyPrice = (int) $package->price;
@@ -856,15 +861,18 @@ class UserController extends Controller
                 ]);
             })->pay()->toJson();
         } else {
-            if($user->request_package_id != null && $user->number == 0) {
-                $user->update([
-                    'requests_count' => 0,
-                ]);
-            }
-            $user->update([
-                'request_package_id' => $package->id,
-                'package_expire_date' => $monthly ? Carbon::now()->addMonth() : Carbon::now()->addYear(),
-                'number' => ($user->number - $user->requests_count) + $package->number,
+//            $user->update([
+//                'request_package_id' => $package->id,
+//                'package_expire_date' => $monthly ? Carbon::now()->addMonth() : Carbon::now()->addYear(),
+//                'number' => ($user->number - $user->requests_count) + $package->number,
+//            ]);
+
+            $lastPlan = SelectedPlan::where('user_id', '=', $user->id)
+                ->last();
+            $user->selectedPlans()->create([
+                'start_date' => Carbon::createFromTimestamp($lastPlan->end_date)->addDay(),
+                'end_date' => $monthly ? Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addMonth() : Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addYear(),
+                'number' => $package->number,
             ]);
             /** @var Wallet $wallet */
             $wallet = $user->wallet;
