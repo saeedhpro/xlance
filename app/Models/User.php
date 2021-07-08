@@ -120,7 +120,7 @@ class User extends Authenticatable implements MustVerifyEmail
         /** @var SelectedPlan $plan */
         $plan = $this->selectedPlan();
         if($plan) {
-            $count = RequestPackage::where('user_id', '=', $this->id)
+            $count = Request::where('user_id', '=', $this->id)
                 ->where('created_at', '>', $plan->start_date)
                 ->where('created_at', '<=', $plan->end_date)
                 ->count();
