@@ -102,12 +102,17 @@ class User extends Authenticatable implements MustVerifyEmail
     public function selectedPlan()
     {
         $this->deleteOldPlans();
-        return $this->selectedPlans()->where('start_date', '>', Carbon::now())->where('end_date', '<=', Carbon::now())->first();
+        return $this->selectedPlans()->where('start_date', '<=', Carbon::now())
+            ->where('end_date', '>', Carbon::now())->first();
     }
 
     public function getNumber()
     {
-        return $this->selectedPlan() ? $this->selectedPlan()->number : 0;
+        if($this->selectedPlan()) {
+            return $this->selectedPlan()->number;
+        } else {
+            return $this->number;
+        }
     }
 
     public function requestsCount()
@@ -119,7 +124,7 @@ class User extends Authenticatable implements MustVerifyEmail
                 ->where('created_at', '>', $plan->start_date)
                 ->where('created_at', '<=', $plan->end_date)
                 ->count();
-            if($this->getNumber() - $count == 0) {
+            if($this->getNumber() == $count) {
                 $plan->forceDelete();
                 return 0;
             } else {

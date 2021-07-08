@@ -17,6 +17,7 @@ class Transaction extends Model
     const DEPOSIT_TYPE = 'deposit';
     const PACKAGE_TYPE = 'package';
     const SECURE_PAYMENT_TYPE = 'secure_payment';
+    const REQUEST_TYPE = 'request';
 
     protected $fillable = [
         'amount',

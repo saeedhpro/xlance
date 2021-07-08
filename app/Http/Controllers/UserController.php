@@ -543,13 +543,13 @@ class UserController extends Controller
         if($count != 0) {
             return response()->json(['errors' => ['project' => ['شما قبلا برای این پروژه درخواست ثبت کرده اید!']]], 422);
         }
-        if($auth->getNumber() - $auth->requestsCount() == 0) {
+        if($auth->getNumber() == $auth->requestsCount()) {
             return response()->json(['errors' => ['project' => ['تعداد درخواست های شما تمام شده است. برای ارسال درخواست پلن جدید تهیه کنید!']]], 422);
         }
-        if($auth->id === $project->employer->id) {
+        if($auth->id == $project->employer->id) {
             return response()->json(['errors' => ['project' => ['شما کارفرمای این پروژه هستید پس نمی توانید برای این پروژه درخواست ثبت کنید!']]], 422);
         }
-        if($project->freelancer !== null) {
+        if($project->freelancer_id != null) {
             return response()->json(['errors' => ['project' => ['پروژه درحال انجا می باشد!']]], 422);
         }
         if(!$auth->isValidated()) {
@@ -566,7 +566,7 @@ class UserController extends Controller
         if($sendRequestForProjectRequest->is_distinguished) {
             $amount = $amount + (int) $settings->distinguished_price;
         }
-        if($sendRequestForProjectRequest->is_distinguished) {
+        if($sendRequestForProjectRequest->is_sponsored) {
             $amount = $amount + (int) $settings->sponsored_price;
         }
         if((int) $wallet->balance < $amount) {
@@ -631,7 +631,7 @@ class UserController extends Controller
         if($project->acceptFreelancerRequest()->count() != 0) {
             return response()->json(['errors' => ['freelancer' => ['شما قبلا درخواست یک فریلنسر دیگر را پذیرفته اید']]], 422);
         }
-        if($project->selected_request_id == null) {
+        if($project->selected_request_id != null) {
             return response()->json(['errors' => ['project' => ['پروژه در حال انجام است']]], 422);
         }
         if($auth->id == $project->employer->id) {
@@ -861,17 +861,19 @@ class UserController extends Controller
                 ]);
             })->pay()->toJson();
         } else {
-//            $user->update([
-//                'request_package_id' => $package->id,
-//                'package_expire_date' => $monthly ? Carbon::now()->addMonth() : Carbon::now()->addYear(),
-//                'number' => ($user->number - $user->requests_count) + $package->number,
-//            ]);
-
-            $lastPlan = SelectedPlan::where('user_id', '=', $user->id)
+            $lastPlan = SelectedPlan::all()->where('user_id', '=', $user->id)
                 ->last();
+            if($lastPlan) {
+                $start_date = Carbon::createFromTimestamp($lastPlan->end_date)->addSecond();
+                $end_date = $monthly ? Carbon::createFromTimestamp($lastPlan->end_date)->addSecond()->addMonth() :
+                    Carbon::createFromTimestamp($lastPlan->end_date)->addSecond()->addYear();
+            } else {
+                $start_date = Carbon::now();
+                $end_date = $monthly ? Carbon::now()->addMonth() : Carbon::now()->addYear();
+            }
             $user->selectedPlans()->create([
-                'start_date' => Carbon::createFromTimestamp($lastPlan->end_date)->addDay(),
-                'end_date' => $monthly ? Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addMonth() : Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addYear(),
+                'start_date' => $start_date,
+                'end_date' => $end_date,
                 'number' => $package->number,
             ]);
             /** @var Wallet $wallet */

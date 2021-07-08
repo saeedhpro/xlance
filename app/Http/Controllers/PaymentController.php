@@ -76,11 +76,19 @@ class PaymentController extends Controller
                 $user = $t->user;
                 $monthly = $t->is_monthly;
                 $package = $t->package;
-                $lastPlan = SelectedPlan::where('user_id', '=', $user->id)
+                $lastPlan = SelectedPlan::all()->where('user_id', '=', $user->id)
                     ->last();
+                if($lastPlan) {
+                    $start_date = Carbon::createFromTimestamp($lastPlan->end_date)->addSecond();
+                    $end_date = $monthly ? Carbon::createFromTimestamp($lastPlan->end_date)->addSecond()->addMonth() :
+                        Carbon::createFromTimestamp($lastPlan->end_date)->addSecond()->addYear();
+                } else {
+                    $start_date = Carbon::now();
+                    $end_date = $monthly ? Carbon::now()->addMonth() : Carbon::now()->addYear();
+                }
                 $user->selectedPlans()->create([
-                    'start_date' => Carbon::createFromTimestamp($lastPlan->end_date)->addDay(),
-                    'end_date' => $monthly ? Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addMonth() : Carbon::createFromTimestamp($lastPlan->end_date)->addDay()->addYear(),
+                    'start_date' => $start_date,
+                    'end_date' => $end_date,
                     'number' => $package->number,
                 ]);
                 /** @var Wallet $wallet */
