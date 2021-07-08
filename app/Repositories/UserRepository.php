@@ -434,7 +434,7 @@ class UserRepository extends BaseRepository implements UserInterface
         if($requestForProjectRequest->is_distinguished) {
             $wallet->forceWithdraw((int) $settings->distinguished_price);
         }
-        if($requestForProjectRequest->is_distinguished) {
+        if($requestForProjectRequest->is_sponsored) {
             $wallet->forceWithdraw((int) $settings->sponsored_price);
         }
         $user->save();

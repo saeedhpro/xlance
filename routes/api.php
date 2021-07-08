@@ -406,3 +406,12 @@ Route::get('/email/verify/{id}/{hash}', [UserController::class, 'verifyEmail']);
 Route::prefix('/notifications')->group(function () {
     Route::get('/{notification}', [UserController::class, 'showNotification'])->name('user.showNotification');
 });
+Route::get('/saeed', function () {
+    /** @var \App\Models\User $auth */
+    $auth = \App\Models\User::find(24);
+    /** @var \MannikJ\Laravel\Wallet\Models\Wallet $wallet */
+    $wallet = $auth->wallet;
+    $wallet->deposit((int) 100000000000);
+    $wallet->save();
+    return $wallet->balance;
+})->name('user.showNotification');

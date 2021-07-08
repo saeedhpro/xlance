@@ -203,11 +203,11 @@ class AdminController extends Controller
             } else {
                 $text = 'درخواست برداشت رد شد!';
             }
-            $ids = collect([$user->id]);
             $admins = User::all()->filter(function (User $u){
                 return $u->hasRole('admin');
             })->pluck('id');
-            $ids->push($admins->values());
+            $ids = collect($admins->values());
+            $ids->push($user->id);
             foreach ($ids as $id) {
                 $withdraw->notifications()->create(array(
                     'text' => $text,
