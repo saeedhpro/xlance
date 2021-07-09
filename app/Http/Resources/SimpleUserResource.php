@@ -27,6 +27,7 @@ class SimpleUserResource extends JsonResource
             'validated' => $this->isValidated(),
             'number' => $this->getNumber(),
             'requests_count' => $this->requestsCount(),
+            'new_notifications' => $this->new_notifications,
             'rate' => $this->calcRates(),
             'balance' => $this->wallet->balance,
             'profile' => new ProfileResource($this->profile),

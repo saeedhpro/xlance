@@ -14,10 +14,18 @@ class SelectedPlan extends Model
         'start_date',
         'end_date',
         'number',
+        'plan_id',
+        'title',
+        'is_monthly',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function plan()
+    {
+        return $this->belongsTo(RequestPackage::class, 'plan_id', 'id');
     }
 }

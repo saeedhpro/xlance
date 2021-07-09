@@ -43,10 +43,32 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
         parent::__construct($model);
     }
 
+    /**
+     * Find one by ID
+     * @param int $id
+     * @return mixed
+     */
+    public function find($id)
+    {
+        return $this->model->where('status', '!=', Project::IN_PAY_STATUS)
+            ->where('id', '=', $id)->first();
+    }
+
+    /**
+     * Find one by ID or throw exception
+     * @param int $id
+     * @return mixed
+     */
+    public function findOneOrFail($id)
+    {
+        return $this->model->where('status', '!=', Project::IN_PAY_STATUS)
+            ->where('id', '=', $id)->firstOrFail();
+    }
+
     public function all($columns = array('*'), $orderBy = 'id', $sortBy = 'desc')
     {
 //        return $this->model->orderBy($orderBy, $sortBy)->where('status', '=', Project::PUBLISHED_STATUS)->get($columns);
-        return $this->model->orderBy($orderBy, $sortBy)->get($columns);
+        return $this->model->orderBy($orderBy, $sortBy)->where('status', '=', Project::PUBLISHED_STATUS)->get($columns);
     }
 
     public function allByPagination($columns = array('*'), $orderBy = 'id', $sortBy = 'desc', $page = 1, $limit = 10)
@@ -230,7 +252,7 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
                 'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
             ));
             Notification::sendNotificationToAll([$user->email], $notificationBody, $notificationBody, null);
-            Notification::sendNotificationToUsers(collect([$user->id]));
+            Notification::sendNotificationToUsers(collect([$user]));
         } else {
             $payment->update([
                 'status' => SecurePayment::REJECTED_STATUS
@@ -243,7 +265,7 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
                 'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
             ));
             Notification::sendNotificationToAll([$user->email], $notificationBody, $notificationBody, null);
-            Notification::sendNotificationToUsers(collect([$user->id]));
+            Notification::sendNotificationToUsers(collect([$user]));
         }
         return $accepted;
     }

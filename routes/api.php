@@ -138,6 +138,7 @@ Route::middleware('auth:api')->group(function () {
 Route::prefix('/user')->middleware('auth:api')->group(function () {
     Route::get('/me', [UserController::class, 'me'])->name('user.me');
     Route::put('/me', [UserController::class, 'updateMe'])->name('user.updateMe');
+    Route::get('/plans', [UserController::class, 'authPlans'])->name('user.updateMe');
     Route::put('/password', [UserController::class, 'changeAuthPassword'])->name('user.changeAuthPassword');
     Route::get('/posts', [UserController::class, 'ownPosts'])->name('user.posts');
     Route::get('/posts/liked', [UserController::class, 'ownLikedPosts'])->name('user.ownLikedPosts');

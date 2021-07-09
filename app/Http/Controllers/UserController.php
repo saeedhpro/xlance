@@ -34,6 +34,7 @@ use App\Http\Resources\DisputeCollectionResource;
 use App\Http\Resources\MessageResource;
 use App\Http\Resources\NotificationCollectionResource;
 use App\Http\Resources\NotificationResource;
+use App\Http\Resources\PackageCollectionResource;
 use App\Http\Resources\PaymentHistoryCollectionResource;
 use App\Http\Resources\PortfolioCollectionResource;
 use App\Http\Resources\PostCollectionResource;
@@ -71,6 +72,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Facades\Hash;
 use MannikJ\Laravel\Wallet\Models\Wallet;
 use Shetabit\Multipay\Invoice;
@@ -237,6 +239,25 @@ class UserController extends Controller
         $auth = auth()->user();
         $auth = $this->userRepository->updateMe($request, $auth);
         return new UserResource($auth);
+    }
+
+    public function authPlans()
+    {
+        /** @var User $auth */
+        $auth = auth()->user();
+        if($auth->number > $auth->requests_count) {
+            return new PackageCollectionResource($auth->selectedPlans);
+        } else {
+            /** @var SelectedPlan $plan */
+            $plan = $auth->selectedPlan()->first();
+            if($plan) {
+                $selectedPlans = $auth->selectedPlans()
+                    ->where('id', '!=', $plan->id)->get();
+            } else {
+                $selectedPlans = $auth->selectedPlans()->get();
+            }
+            return new PackageCollectionResource($selectedPlans);
+        }
     }
 
     public function ownPosts()
@@ -562,7 +583,7 @@ class UserController extends Controller
         $wallet = $auth->wallet;
         /** @var Setting $settings */
         $settings = Setting::all()->first();
-        $amount = (int) $settings->project_price;
+        $amount = 0;
         if($sendRequestForProjectRequest->is_distinguished) {
             $amount = $amount + (int) $settings->distinguished_price;
         }
@@ -629,12 +650,12 @@ class UserController extends Controller
         $auth = auth()->user();
         $project = $request->project;
         if($project->acceptFreelancerRequest()->count() != 0) {
-            return response()->json(['errors' => ['freelancer' => ['شما قبلا درخواست یک فریلنسر دیگر را پذیرفته اید']]], 422);
+            return response()->json(['errors' => ['freelancer' => ['شما قبلا درخواست یک فریلنسر را پذیرفته اید']]], 422);
         }
         if($project->selected_request_id != null) {
             return response()->json(['errors' => ['project' => ['پروژه در حال انجام است']]], 422);
         }
-        if($auth->id == $project->employer->id) {
+        if($auth->id != $project->employer->id) {
             return response()->json(['errors' => ['employer' => ['شما کارفرمای پروژه نیستید']]], 422);
         }
         $request = $this->userRepository->authAcceptOrRejectProjectRequest($projectRequest, $project, $request);
@@ -667,15 +688,10 @@ class UserController extends Controller
             return response()->json(['errors' => ['project' => ['برای این پروژه درخواست دیگری تایید شده است!']]], 422);
         } else if($count != 1){
             return response()->json(['errors' => ['count' => ['شما در خواست تایید شده برای این پروژه ندارید!']]], 422);
+        } else {
+            $request = $this->userRepository->freelancerAcceptOrRejectRequest($projectRequest, $project, $request);
+            return new AcceptFreelancerResource($request);
         }
-        $request = $this->userRepository->freelancerAcceptOrRejectRequest($projectRequest, $project, $request);
-        return new AcceptFreelancerResource($request);
-//        if($auth->can('freelancer-accept-or-reject-request', $request)) {
-//            $request = $this->userRepository->freelancerAcceptOrRejectRequest($projectRequest, $project, $request);
-//            return new AcceptFreelancerResource($request);
-//        } else {
-//            return $this->accessDeniedResponse();
-//        }
     }
 
     public function deposit(DepositRequest $request)
@@ -864,22 +880,26 @@ class UserController extends Controller
             $lastPlan = SelectedPlan::all()->where('user_id', '=', $user->id)
                 ->last();
             if($lastPlan) {
-                $start_date = Carbon::createFromTimestamp($lastPlan->end_date)->addSecond();
-                $end_date = $monthly ? Carbon::createFromTimestamp($lastPlan->end_date)->addSecond()->addMonth() :
-                    Carbon::createFromTimestamp($lastPlan->end_date)->addSecond()->addYear();
+                $start_date = Carbon::createFromFormat('Y-m-d H:i:s',$lastPlan->end_date)->addSecond();
+                $end_date = $monthly ? Carbon::createFromFormat('Y-m-d H:i:s',$lastPlan->end_date)->addSecond()->addMonth() :
+                    Carbon::createFromFormat('Y-m-d H:i:s',$lastPlan->end_date)->addSecond()->addYear();
             } else {
                 $start_date = Carbon::now();
                 $end_date = $monthly ? Carbon::now()->addMonth() : Carbon::now()->addYear();
             }
-            $user->selectedPlans()->create([
+            SelectedPlan::create([
+                'user_id' => $user->id,
                 'start_date' => $start_date,
                 'end_date' => $end_date,
                 'number' => $package->number,
+                'title' => $package->title,
+                'plan_id' => $package->id,
+                'is_monthly' => $monthly
             ]);
             /** @var Wallet $wallet */
             $wallet = $user->wallet;
             $wallet->forceWithdraw($monthly ? $monthlyPrice : $yearlyPrice);
-            return response()->json(['data' => 'ارقای عضویت انجام شد'], 200);
+            return response()->json(['data' => 'ارتقای عضویت انجام شد'], 200);
         }
     }
 

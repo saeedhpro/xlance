@@ -9,6 +9,7 @@ use App\Http\Resources\ProjectResource;
 use App\Http\Resources\StoryResource;
 use App\Http\Resources\UserResource;
 use App\Jobs\SendNotification;
+use App\Jobs\SendPushNotification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -154,58 +155,7 @@ class Notification extends Model
     }
     public static function sendNotificationToAll($emails, $title, $content, $customContent)
     {
-
-        $TOKEN = "0409b4ebd95972d2b0861f021eef37644ff0d57c";
-
-        $data = array(
-            "app_ids" => ["ld83q4r2lv8mrzqe",],
-            "data" => array(
-                "title" => $title,
-                "content" => $content,
-                "custom_content" => $customContent,
-                "action" => array(
-                    "action_type" => "U",
-                    "url" => "https://pushe.co"
-                ),
-                "filters" => array(
-                    "email" => $emails
-                ),
-                "buttons" => array(
-                    array(
-                        "btn_action" => array(
-                            "action_type" => "U",
-                            "url" => "https://pushe.co"
-                        ),
-                        "btn_content" => "YOUR_CONTENT",
-                        "btn_order" => 0,
-                    ),
-                    array(
-                        "btn_action" => array(
-                            "action_type" => "U",
-                            "url" => "https://pushe.co"
-                        ),
-                        "btn_content" => "YOUR_CONTENT",
-                        "btn_order" => 1,
-                    )
-                ),
-            ),
-        );
-
-        // initialize curl
-        $ch = curl_init("https://api.pushe.co/v2/messaging/notifications/web/");
-
-        // set header parameters
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-            "Content-Type: application/json",
-            "Accept: application/json",
-            "Authorization: Token " . $TOKEN,
-        ));
-        curl_setopt($ch, CURLOPT_POST, 1);
-
-        // set data
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-
-        curl_exec($ch);
+        SendPushNotification::dispatch($title, $content, $customContent, $emails);
         return true;
     }
     public static function sendNotificationToUsers(Collection $users)

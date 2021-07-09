@@ -130,8 +130,9 @@ class User extends Authenticatable implements MustVerifyEmail
             } else {
                 return $count;
             }
+        } else {
+            return $this->requests_count;
         }
-        return 0;
     }
 
     public function histories()
