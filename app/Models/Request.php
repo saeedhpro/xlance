@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 class Request extends Model
 {
     use HasFactory;
-
     const CREATED_STATUS = "created";
     const ACCEPTED_STATUS = "accepted";
     const STARTED_STATUS = "started";
     const FINISHED_STATUS = "finished";
     const REJECTED_STATUS = "rejected";
+    const IN_PAY_STATUS = "inpay";
 
     const FREELANCER_TYPE = "freelancer";
     const EMPLOYER_TYPE = "employer";

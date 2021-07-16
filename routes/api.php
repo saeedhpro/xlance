@@ -395,6 +395,11 @@ Route::prefix('/admin')->group(function (){
 
     Route::post('/wallet/charge', [AdminController::class, 'chargeUserWallet'])->middleware('auth:api');
 
+    Route::prefix('/histories')->group(function (){
+        Route::get('/', [AdminController::class, 'histories'])->middleware('auth:api')->name('histories.index');
+        Route::get('/{history}', [AdminController::class, 'showHistory'])->middleware('auth:api')->name('histories.show');
+    });
+
     Route::prefix('/search')->group(function (){
         Route::get('/user', [AdminController::class, 'searchUser'])->name('search.user');
         Route::get('/project', [AdminController::class, 'searchProject'])->middleware('auth:api')->name('search.project');

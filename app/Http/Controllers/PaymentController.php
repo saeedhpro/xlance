@@ -75,8 +75,8 @@ class PaymentController extends Controller
                 /** @var User $user */
                 $user = $t->user;
                 $monthly = $t->is_monthly;
-                $package = $t->package;
-                $lastPlan = SelectedPlan::all()->where('user_id', '=', $user->id)
+                $package = $t->package;;
+                $lastPlan = SelectedPlan::where('user_id', '=', $user->id)->get()
                     ->last();
                 if($lastPlan) {
                     $start_date = Carbon::createFromFormat('Y-m-d H:i:s', $lastPlan->end_date)->addSecond();
@@ -97,7 +97,13 @@ class PaymentController extends Controller
                 ]);
                 /** @var Wallet $wallet */
                 $wallet = $user->wallet;
-                $wallet->forceWithdraw((int) $t->price);
+                $amount = $monthly ? (int) $package->price - $t->amount :
+                    ((12 * $package->price) * 80 / 100) - ($t->amount * 10);
+                if($amount > $wallet->balance) {
+                    $wallet->forceWithdraw($wallet->balance);
+                } else {
+                    $wallet->forceWithdraw($amount);
+                }
                 $status = 200;
                 $t->update([
                     'status' => Transaction::PAYED_STATUS
@@ -118,6 +124,17 @@ class PaymentController extends Controller
                 ]);
                 $message = 'پرداخت با موفقیت انجام شد برای ادامه روی دکمه ی بازگشت کلیک کنید';
                 $url = 'https://xlance.ir/projects/'. $project->id .'?referenceId='.$referenceId.'&id='.$securePayment->id;
+                return view('payment', compact('referenceId', 'status', 'message', 'url'));
+            } else if($t->type == Transaction::REQUEST_TYPE) {
+                /** @var Project $project */
+                $project = $t->project;
+
+                $status = 200;
+                $t->update([
+                    'status' => Transaction::PAYED_STATUS
+                ]);
+                $message = 'پرداخت با موفقیت انجام شد برای ادامه روی دکمه ی بازگشت کلیک کنید';
+                $url = 'https://xlance.ir/projects/'. $project->id .'?referenceId='.$referenceId;
                 return view('payment', compact('referenceId', 'status', 'message', 'url'));
             }
         } catch (\Exception $e){

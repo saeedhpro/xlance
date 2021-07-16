@@ -95,7 +95,7 @@ class UserRepository extends BaseRepository implements UserInterface
     public function login(LoginRequest $request)
     {
         /** @var User $user */
-        $user = User::whereEmail($request->username)
+        $user = User::with(['profile', 'rates', 'experiences', 'educations', 'achievements', 'skills'])->whereEmail($request->username)
         ->orWhere('username', $request->username)
         ->first();
         return $user;
@@ -424,9 +424,11 @@ class UserRepository extends BaseRepository implements UserInterface
                 broadcast(new NewMessageEvent($message, $admin));
             }
         }
-        $user->update([
-           'requests_count' => $user->requests_count + 1,
-        ]);
+        if($user->number > $user->requests_count) {
+            $user->update([
+                'requests_count' => $user->requests_count + 1,
+            ]);
+        }
         /** @var Wallet $wallet */
         $wallet = $user->wallet;
         /** @var Setting $settings */
@@ -849,24 +851,49 @@ class UserRepository extends BaseRepository implements UserInterface
     {
         /** @var User $auth */
         $auth = auth()->user();
-        $projects = Project::all()->where('status', '=', Project::PUBLISHED_STATUS)->sortByDesc('created_at')->filter(function (Project $project) {
-            return Carbon::parse($project->created_at)->diffInDays(Carbon::now()) < 14;
-        });
-        $projects = $projects->filter(function (Project $project) use($auth) {
-            $project_skills = $project->skills()->pluck('skills.id as id');
-            $auth_skills = $auth->skills()->pluck('skills.id as id');
-            return count(array_intersect($auth_skills->toArray(), $project_skills->toArray())) > 0;
-        });
-        return $projects;
+        $auth_skills = $auth->skills()->pluck('skills.id as id');
+        return Project::query()->with(['skills', 'employer', 'freelancer'])
+            ->where(function ($q) use($auth_skills){
+                $q->where('status', '=', Project::PUBLISHED_STATUS);
+                $q->where('created_at', '>=', Carbon::now()->subDays(14));
+                $q->whereHas('skills', function ($query) use($auth_skills) {
+                    $query->whereIn('skills.id', $auth_skills);
+                });
+        })->orderByDesc('created_at')->get();
     }
 
     public function acceptOrRejectAvatar(AcceptOrRejectProjectRequest $request, Profile $profile)
     {
+        /** @var User $user */
+        $user = $profile->user;
+        $admins = User::all()->filter(function (User $u){
+            return $u->hasRole('admin');
+        })->pluck('id');
+        $ids = collect($admins->values());
+        $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
+        $users = User::all()->whereIn('id', $ids->toArray());
         if($request->accepted) {
             $profile->update([
                 'avatar_accepted' => true,
                 'avatar_id' => $profile->new_avatar_id
             ]);
+            $user->notifs()->create(array(
+                'text' => 'عکس پروفایل شما تایید شد',
+                'type' => Notification::EMPLOYER,
+                'user_id' => $user->id,
+                'image_id' => null
+            ));
+            foreach ($ids as $id) {
+                $user->notifs()->create(array(
+                    'text' => 'عکس پروفایل کاربر '.$user->username.' تایید شد',
+                    'type' => Notification::EMPLOYER,
+                    'user_id' => $id,
+                    'image_id' => null,
+                ));
+            }
+            Notification::sendNotificationToUsers(collect([$user]));
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید شد', 'عکس پروفایل کاربر '.$user->username.' تایید شد', null);
+            Notification::sendNotificationToUsers($users);
             return true;
         } else {
             $profile->newAvatar()->delete();
@@ -874,17 +901,61 @@ class UserRepository extends BaseRepository implements UserInterface
                 'avatar_accepted' => false,
                 'new_avatar_id' => null
             ]);
+            $user->notifs()->create(array(
+                'text' => 'عکس پروفایل شما تایید نشد',
+                'type' => Notification::PROJECT,
+                'user_id' => $user->id,
+                'image_id' => null
+            ));
+            foreach ($ids as $id) {
+                $user->notifs()->create(array(
+                    'text' => 'عکس پروفایل کاربر '.$user->username.' تایید نشد',
+                    'type' => Notification::PROJECT,
+                    'user_id' => $id,
+                    'image_id' => null
+                ));
+            }
+            Notification::sendNotificationToUsers(collect([$user]));
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید نشد', 'عکس پروفایل کاربر '.$user->username.' تایید نشد', null);
+            Notification::sendNotificationToUsers($users);
             return false;
         }
     }
 
     public function acceptOrRejectBackground(AcceptOrRejectProjectRequest $request, Profile $profile)
     {
+        /** @var User $user */
+        $user = $profile->user;
+        $admins = User::all()->filter(function (User $u){
+            return $u->hasRole('admin');
+        })->pluck('id');
+        $ids = collect($admins->values());
+        $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
+        $users = User::all()->whereIn('id', $ids->toArray());
+
         if($request->accepted) {
             $profile->update([
                 'bg_accepted' => true,
                 'bg_id' => $profile->new_bg_id
             ]);
+            $user->notifs()->create(array(
+                'text' => 'عکس پس زمینه شما تایید شد',
+                'type' => Notification::EMPLOYER,
+                'user_id' => $user->id,
+                'image_id' => null
+            ));
+            foreach ($ids as $id) {
+                $user->notifs()->create(array(
+                    'text' => 'عکس پس زمینه کاربر '.$user->username.' تایید شد',
+                    'type' => Notification::EMPLOYER,
+                    'user_id' => $id,
+                    'image_id' => null,
+                ));
+            }
+            Notification::sendNotificationToUsers(collect([$user]));
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید شد', 'عکس پروفایل کاربر '.$user->username.' تایید شد', null);
+            Notification::sendNotificationToUsers($users);
+
             return true;
         } else {
             $profile->newBackground()->delete();
@@ -892,6 +963,23 @@ class UserRepository extends BaseRepository implements UserInterface
                 'bg_accepted' => false,
                 'new_bg_id' => null
             ]);
+            $user->notifs()->create(array(
+                'text' => 'عکس پس زمینه شما تایید نشد',
+                'type' => Notification::PROJECT,
+                'user_id' => $user->id,
+                'image_id' => null
+            ));
+            foreach ($ids as $id) {
+                $user->notifs()->create(array(
+                    'text' => 'عکس پس زمینه کاربر '.$user->username.' تایید نشد',
+                    'type' => Notification::PROJECT,
+                    'user_id' => $id,
+                    'image_id' => null
+                ));
+            }
+            Notification::sendNotificationToUsers(collect([$user]));
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید نشد', 'عکس پروفایل کاربر '.$user->username.' تایید نشد', null);
+            Notification::sendNotificationToUsers($users);
             return false;
         }
     }
@@ -899,7 +987,7 @@ class UserRepository extends BaseRepository implements UserInterface
     public function acceptOrRejectNationalCard(AcceptOrRejectProjectRequest $request, Profile $profile)
     {
         $profile->update([
-            'national_card_accepted' => $request->accepted ? true : false
+            'national_card_accepted' => (bool)$request->accepted
         ]);
         if(!$request->accepted) {
             $profile->nationalCard()->delete();
@@ -907,8 +995,36 @@ class UserRepository extends BaseRepository implements UserInterface
                 'national_card_id' => null
             ]);
         }
+        /** @var User $user */
+        $user = $profile->user;
+        $admins = User::all()->filter(function (User $u){
+            return $u->hasRole('admin');
+        })->pluck('id');
+        $ids = collect($admins->values());
+        $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
+        $users = User::all()->whereIn('id', $ids->toArray());
+        $user->notifs()->create(array(
+            'text' => $request->accepted ? 'عکس کارت ملی شما تایید شد' : 'عکس کارت ملی شما تایید نشد',
+            'type' => Notification::PROJECT,
+            'user_id' => $user->id,
+            'image_id' => null
+        ));
+        foreach ($ids as $id) {
+            $user->notifs()->create(array(
+                'text' => $request->accepted ? 'عکس کارت ملی کاربر '.$user->username.' تایید شد' : 'عکس کارت ملی کاربر '.$user->username.' تایید نشد',
+                'type' => Notification::PROJECT,
+                'user_id' => $id,
+                'image_id' => null
+            ));
+        }
+        Notification::sendNotificationToUsers(collect([$user]));
+        Notification::sendNotificationToAll($emails->toArray(),
+            $request->accepted ? 'عکس کارت ملی کاربر '.$user->username.' تایید شد' : 'عکس کارت ملی کاربر '.$user->username.' تایید نشد',
+            $request->accepted ? 'عکس کارت ملی کاربر '.$user->username.' تایید شد' : 'عکس کارت ملی کاربر '.$user->username.' تایید نشد',
+            null);
+        Notification::sendNotificationToUsers($users);
         dispatch(new ValidateUserJob($profile->user));
-        return $request->accepted ? true : false;
+        return (bool)$request->accepted;
     }
 
     public function acceptOrRejectSheba(AcceptOrRejectProjectRequest $request, Profile $profile)
@@ -921,6 +1037,34 @@ class UserRepository extends BaseRepository implements UserInterface
                 'sheba' => null
             ]);
         }
+        /** @var User $user */
+        $user = $profile->user;
+        $admins = User::all()->filter(function (User $u){
+            return $u->hasRole('admin');
+        })->pluck('id');
+        $ids = collect($admins->values());
+        $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
+        $users = User::all()->whereIn('id', $ids->toArray());
+        $user->notifs()->create(array(
+            'text' => $request->accepted ? 'شماره شبا شما تایید شد' : 'شماره شبا شما تایید نشد',
+            'type' => Notification::PROJECT,
+            'user_id' => $user->id,
+            'image_id' => null
+        ));
+        foreach ($ids as $id) {
+            $user->notifs()->create(array(
+                'text' => $request->accepted ? 'شماره شبا کاربر '.$user->username.' تایید شد' : 'شماره شبا کاربر '.$user->username.' تایید نشد',
+                'type' => Notification::PROJECT,
+                'user_id' => $id,
+                'image_id' => null
+            ));
+        }
+        Notification::sendNotificationToUsers(collect([$user]));
+        Notification::sendNotificationToAll($emails->toArray(),
+            $request->accepted ? 'شماره شبا کاربر '.$user->username.' تایید شد' : 'شماره شبا کاربر '.$user->username.' تایید نشد',
+            $request->accepted ? 'شماره شبا کاربر '.$user->username.' تایید شد' : 'شماره شبا کاربر '.$user->username.' تایید نشد',
+            null);
+        Notification::sendNotificationToUsers($users);
         return $request->accepted ? true : false;
     }
 

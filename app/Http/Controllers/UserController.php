@@ -20,7 +20,6 @@ use App\Http\Requests\SendMessageRequest;
 use App\Http\Requests\SendRequestForProjectRequest;
 use App\Http\Requests\SendResetLinkEmailRequest;
 use App\Http\Requests\SetPackageRequest;
-use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\UpdateAvatarRequest;
 use App\Http\Requests\UpdatePasswordRequest;
 use App\Http\Requests\UpdateProfileRequest;
@@ -29,7 +28,6 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\AcceptFreelancerResource;
 use App\Http\Resources\AssetResource;
 use App\Http\Resources\ConversationCollectionResource;
-use App\Http\Resources\ConversationResource;
 use App\Http\Resources\DisputeCollectionResource;
 use App\Http\Resources\MessageResource;
 use App\Http\Resources\NotificationCollectionResource;
@@ -45,6 +43,7 @@ use App\Http\Resources\SecurePaymentCollectionResource;
 use App\Http\Resources\SkillCollectionResource;
 use App\Http\Resources\StoryCollectionResource;
 use App\Http\Resources\UserCollectionResource;
+use App\Http\Resources\UserProjectCollectionResource;
 use App\Http\Resources\UserResource;
 use App\Http\Resources\WalletResource;
 use App\Http\Resources\WithdrawRequestCollectionResource;
@@ -71,8 +70,6 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
-use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Facades\Hash;
 use MannikJ\Laravel\Wallet\Models\Wallet;
 use Shetabit\Multipay\Invoice;
@@ -420,13 +417,13 @@ class UserController extends Controller
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
         return [
-            'finished' => new ProjectCollectionResource(
+            'finished' => new UserProjectCollectionResource(
                 $user->ownFinishedProjects()->sortByDesc('created_at')),
-            'started' => new ProjectCollectionResource(
+            'started' => new UserProjectCollectionResource(
                 $user->ownInProgressProjects()->sortByDesc('created_at')),
-            'published' => new ProjectCollectionResource(
+            'published' => new UserProjectCollectionResource(
                 $user->publishedProjects()->get()->sortByDesc('created_at')),
-            'created' => new ProjectCollectionResource(
+            'created' => new UserProjectCollectionResource(
                 $user->ownOnlyCreatedProjects()->sortByDesc('created_at')),
         ];
     }
@@ -590,8 +587,11 @@ class UserController extends Controller
         if($sendRequestForProjectRequest->is_sponsored) {
             $amount = $amount + (int) $settings->sponsored_price;
         }
-        if((int) $wallet->balance < $amount) {
-            return response()->json(['errors' => ['amount' =>['موجودی کیف پول شما کمتر از مبلغ مورد نیاز می باشد!']]], 422);
+        $balance =(int) $wallet->balance;
+        if($balance < $amount) {
+            return response()->json(['errors' => ['amount' =>['موجودی کیف پول شما کم است']]], 422);
+
+//            return $this->createTransactionForSendRequest($auth, $amount - $balance, $project, $sendRequestForProjectRequest);
         }
         $spPrices = $this->getSecurePayments($sendRequestForProjectRequest);
         if((int) $sendRequestForProjectRequest->price != $spPrices) {
@@ -599,6 +599,51 @@ class UserController extends Controller
         }
         $request = $this->userRepository->sendRequest($sendRequestForProjectRequest);
         return new RequestResource($request);
+    }
+
+    private function createTransactionForSendRequest(User $user, int $amount, Project $project, SendRequestForProjectRequest $requestForProjectRequest) {
+        $invoice = new Invoice;
+        $amount = (int) ($amount / 10);
+        $invoice->amount($amount);
+        $invoice->detail('t_id', $invoice->getTransactionId());
+        /** @var Request $request */
+        $request = $user->sentRequests()->create([
+            'title' => '',
+            'status' => Request::IN_PAY_STATUS,
+            'price' => $requestForProjectRequest->price,
+            'type' => Request::FREELANCER_TYPE,
+            'delivery_date' => $requestForProjectRequest->delivery_date,
+            'description' => $requestForProjectRequest->description,
+            'is_distinguished' => $requestForProjectRequest->is_distinguished,
+            'is_sponsored' => $requestForProjectRequest->is_sponsored,
+            'project_id' => $project->id,
+            'to_id' => $project->employer->id,
+        ]);
+        if($requestForProjectRequest->has('new_secure_payments')) {
+            $securePayments = $requestForProjectRequest->get('new_secure_payments');
+            foreach ($securePayments as $payment) {
+                $request->securePayments()->create([
+                    'title' => $payment['title'],
+                    'price' => $payment['price'],
+                    'status' => SecurePayment::IN_PAY_STATUS,
+                    'project_id' => $project->id,
+                    'user_id' => $user->id,
+                    'to_id' => $project->employer->id,
+                    'is_first' => true,
+                ]);
+            }
+        }
+        return Payment::purchase($invoice, function($driver, $transactionId) use($user, $invoice, $project, $amount){
+            Transaction::create([
+                'user_id' =>  $user->id,
+                'transaction_id' => $transactionId,
+                'project_id' => $project->id,
+                'type' => Transaction::REQUEST_TYPE,
+                'status' => Transaction::CREATED_STATUS,
+                'amount' => $invoice->getAmount(),
+                'withdraw_amount' => $amount,
+            ]);
+        })->pay()->toJson();
     }
 
     public function getSecurePayments(SendRequestForProjectRequest $request){
@@ -857,10 +902,10 @@ class UserController extends Controller
         /** @var RequestPackage $package */
         $package = RequestPackage::findOrFail($request->get('package_id'));
         $monthly = $request->get('monthly');
-        $yearlyPrice = 12 * (int) $package->price - ((12 * (int) $package->price) * 20 / 100) ;
         $monthlyPrice = (int) $package->price;
+        $yearlyPrice = (int)(12 * $monthlyPrice) * 80 / 100 ;
         if(($monthly && $package->price > $balance ) || (!$monthly && $yearlyPrice > $balance)) {
-            $amount = $monthly ? ((int) $package->price) - $balance : ((int) $package->price * 12) - $balance;
+            $amount = $monthly ? $monthlyPrice - $balance : $yearlyPrice - $balance;
             $invoice = new Invoice;
             $invoice->amount((int) ($amount / 10));
             $invoice->detail('t_id', $invoice->getTransactionId());

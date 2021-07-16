@@ -294,7 +294,7 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
             $freelancer = $payment->user;
             /** @var Wallet $wallet */
             $wallet = $freelancer->wallet;
-            $wallet->deposit((int) $payment->price);
+            $wallet->deposit(((int) $payment->price * 90/100));
             /** @var Request $request */
             $request = $payment->request;
             $request->update([

@@ -209,11 +209,11 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         Gate::define('send-cancel-request-project', function (User $user, Project $project) {
-            $cancelRequests = $project->cancelRequests()->where('freelancer_id', '=', $user->id)->get();
-            $cancelRequests = $cancelRequests->filter(function (CancelProjectRequest $request) {
-               return $request->status == CancelProjectRequest::CREATED_STATUS;
-            });
-            $count = $cancelRequests->count();
+            $count = $project->cancelRequests()
+                ->where('freelancer_id', '=', $user->id)
+                ->where(function ($q) {
+                    $q->where('status', '=', CancelProjectRequest::CREATED_STATUS);
+                })->count();
             return $project->status == Project::STARTED_STATUS && $project->freelancer && $user->id === $project->freelancer->id && $count === 0;
         });
 

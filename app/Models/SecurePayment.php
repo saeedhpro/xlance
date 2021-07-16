@@ -10,13 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 class SecurePayment extends Model
 {
     use HasFactory, Filterable;
-
     const CREATED_STATUS = "created";
     const ACCEPTED_STATUS = "accepted";
     const REJECTED_STATUS = "rejected";
     const PAYED_STATUS = "payed";
     const CANCELED_STATUS = "canceled";
     const FREE_STATUS = "free";
+    const IN_PAY_STATUS = "inpay";
 
     protected $fillable = [
         'title',

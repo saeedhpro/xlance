@@ -41,13 +41,13 @@ class StoryRepository extends BaseRepository implements StoryInterface
         $followings = $followings->pluck('id');
         $admins = User::all()->filter(function (User $user) {
             return $user->hasRole('admin');
-        })->pluck('id');;
+        })->pluck('id');
         $followings->push($user->id);
-        $users = User::with('stories')->whereIn('users.id', $followings)->orWhereIn('users.id', $admins)->get();
-        $users = $users->filter(function (User $user) {
-           return $user->stories()->where('created_at', '>', Carbon::now()->subHours(24))->count() > 0;
-        });
-        return $users;
+        $users = User::with('availableStories')->whereIn('users.id', $followings)->orWhereIn('users.id', $admins);
+        Story::query()->where('created_at', '<', Carbon::now()->subHours(24))->delete();
+        return $users->whereHas('availableStories', function ($q) {
+            $q->where('availableStories.created_at', '>=', Carbon::now()->subHours(24));
+        })->get();
     }
     /**
      * Return all model rows

@@ -2,9 +2,10 @@
 
 namespace App\Http\Resources;
 
+use Carbon\Carbon;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ConversationResource extends JsonResource
+class UserProjectResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -16,12 +17,11 @@ class ConversationResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'title' => $this->title,
             'status' => $this->status,
-            'type' => $this->type,
-            'new_messages_count' => $this->newMessages(),
-            'user' => new ConversationUserResource($this->user),
-            'to' => new ConversationUserResource($this->to),
-            'project' => new SimpleProjectResource($this->project),
+            'freelancer' => new ConversationUserResource($this->freelancer),
+            'selected_request' => new UserProjectRequestResource($this->selectedRequest),
+            'created_at' => $this->created_at,
         ];
     }
 }

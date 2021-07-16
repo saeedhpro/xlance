@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AcceptOrRejectProjectRequest;
 use App\Http\Requests\ChargeUserWalletRequest;
+use App\Http\Resources\AdminProjectCollectionResource;
 use App\Http\Resources\DisputeCollectionResource;
 use App\Http\Resources\NotificationCollectionResource;
 use App\Http\Resources\NotificationResource;
+use App\Http\Resources\PaymentHistoryCollectionResource;
+use App\Http\Resources\PaymentHistoryResource;
 use App\Http\Resources\PortfolioCollectionResource;
 use App\Http\Resources\PortfolioResource;
 use App\Http\Resources\PostCollectionResource;
@@ -30,6 +33,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Request as HttpRequest;
+use Illuminate\Http\Resources\Json\ResourceCollection;
 use MannikJ\Laravel\Wallet\Exceptions\UnacceptedTransactionException;
 use MannikJ\Laravel\Wallet\Models\Wallet;
 
@@ -51,9 +55,12 @@ class AdminController extends Controller
         /** @var User $auth */
         $auth = $this->getAuth();
         if($auth->hasRole('admin')) {
-            return new ProjectCollectionResource(Project::all()->filter(function(Project $p){
-                return $p->status != Project::IN_PAY_STATUS;
-            })->sortByDesc('created_at'));
+            return new AdminProjectCollectionResource(Project::query()->with([
+                'employer',
+                'freelancer',
+            ])->where(function ($q) {
+                $q->where('status', '!=', Project::IN_PAY_STATUS);
+            })->orderByDesc('created_at')->get());
         } else {
             return  $this->accessDeniedResponse();
         }
@@ -345,14 +352,17 @@ class AdminController extends Controller
         /** @var User $auth */
         $auth = $this->getAuth();
         if($auth->hasRole('admin')) {
-            $finishedProjects = Project::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (Project $project) {
-                return $project->status == Project::FINISHED_STATUS;
+            $finishedProjects = Project::query()->with(['employer', 'freelancer'])->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', Project::FINISHED_STATUS);
             })->count();
-            $startedProjects = Project::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (Project $project) {
-                return $project->status == Project::STARTED_STATUS;
+            $startedProjects = Project::query()->with(['employer', 'freelancer'])->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', Project::STARTED_STATUS);
             })->count();
-            $disputedProjects = Project::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (Project $project) {
-                return $project->status == Project::DISPUTED_STATUS;
+            $disputedProjects = Project::query()->with(['employer', 'freelancer'])->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', Project::DISPUTED_STATUS);
             })->count();
 
             $data = [
@@ -378,14 +388,17 @@ class AdminController extends Controller
         /** @var User $auth */
         $auth = $this->getAuth();
         if($auth->hasRole('admin')) {
-            $openDisputes = Dispute::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (Dispute $dispute) {
-                return $dispute->status == Dispute::CREATED_STATUS;
+            $openDisputes = Dispute::query()->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', Dispute::CREATED_STATUS);
             })->count();
-            $closeDisputes = Dispute::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (Dispute $dispute) {
-                return $dispute->status == Dispute::CLOSED_STATUS;
+            $closeDisputes = Dispute::query()->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', Dispute::CLOSED_STATUS);
             })->count();
-            $inProgressDisputes = Dispute::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (Dispute $dispute) {
-                return $dispute->status == Dispute::IN_PROGRESS_STATUS;
+            $inProgressDisputes = Dispute::query()->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', Dispute::IN_PROGRESS_STATUS);
             })->count();
 
             $data = [
@@ -411,12 +424,15 @@ class AdminController extends Controller
         /** @var User $auth */
         $auth = $this->getAuth();
         if($auth->hasRole('admin')) {
-            $payments = Transaction::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (Transaction $transaction) {
-                return $transaction->status == Transaction::PAYED_STATUS;
-            })->pluck('amount');
-            $withdraws = WithdrawRequest::all()->where('created_at', '>=', Carbon::now()->subMonth())->filter(function (WithdrawRequest $withdrawRequest) {
-                return $withdrawRequest->status == WithdrawRequest::PAYED_STATUS;
-            })->pluck('amount');
+            $payments = Transaction::query()->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', Transaction::PAYED_STATUS);
+            })->get()->pluck('amount');
+
+            $withdraws = WithdrawRequest::query()->where(function ($q) {
+                $q->where('created_at', '>=', Carbon::now()->subMonth());
+                $q->where('status', '=', WithdrawRequest::PAYED_STATUS);
+            })->get()->pluck('amount');
             $data = [
                 'series' => [
                     [
@@ -448,7 +464,7 @@ class AdminController extends Controller
         $users = User::with('skills')->get();
         $users = $users->filter(function (User $user) {
             return $user->hasRole('freelancer') || $user->hasRole('employer');
-        });
+        })->sortByDesc('created_at');
         if($role && $role !== 'both') {
             $users = $users->filter(function (User $user) use($role) {
                 return $user->hasRole($role);
@@ -559,6 +575,33 @@ class AdminController extends Controller
             } catch (UnacceptedTransactionException $e) {
                 return false;
             }
+        } else {
+            return $this->accessDeniedResponse();
+        }
+    }
+
+    public function histories()
+    {
+        /** @var User $auth */
+        $auth = auth()->user();
+        if($auth->hasRole('admin')) {
+            if($this->hasPage()) {
+                $page = $this->getPage();
+                return new PaymentHistoryCollectionResource(PaymentHistory::query()->orderByDesc('created_at')->paginate(10));
+            } else {
+                return new PaymentHistoryCollectionResource(PaymentHistory::query()->orderByDesc('created_at')->get());
+            }
+        } else {
+            return $this->accessDeniedResponse();
+        }
+    }
+
+    public function showHistory(PaymentHistory $history)
+    {
+        /** @var User $auth */
+        $auth = auth()->user();
+        if($auth->hasRole('admin')) {
+            return new PaymentHistoryResource($history);
         } else {
             return $this->accessDeniedResponse();
         }

@@ -239,6 +239,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(Story::class);
     }
 
+    public function availableStories()
+    {
+        return $this->hasMany(Story::class);
+    }
+
     public function lastStories()
     {
         return $this->stories()->where('created_at', '>', Carbon::now()->subHours(24))->get();
@@ -274,53 +279,49 @@ class User extends Authenticatable implements MustVerifyEmail
         return Project::all()->where('employer_id', '=', $this->id)->where('status', '!=', Project::IN_PAY_STATUS)->where('status', '!=', Project::REJECTED_STATUS);
     }
 
-    public function allProjects()
-    {
-        $own = $this->createdProjects()->get();
-        return $own->filter(function (Project $project) {
-            return $project->status == Project::CREATED_STATUS ||
-                $project->status == Project::PUBLISHED_STATUS ||
-                $project->status == Project::STARTED_STATUS ||
-                $project->status == Project::FINISHED_STATUS;
-        });
-    }
-
     public function doingProjects()
     {
         return $this->hasMany(Project::class, 'freelancer_id', 'id');
     }
 
+    public function allProjects()
+    {
+        return $this->createdProjects()->with(['freelancer'])->where(function ($q) {
+            $q->whereIn('status', [
+                Project::CREATED_STATUS,
+                Project::PUBLISHED_STATUS,
+                Project::STARTED_STATUS,
+                Project::FINISHED_STATUS,
+            ]);
+        })->get();
+    }
+
     public function ownDoingProjects()
     {
-        $own = $this->createdProjects()->get();
-        return $own->filter(function (Project $project) {
-            return $project->selected_request_id != null;
-        });
+        return $this->createdProjects()->with(['freelancer'])->where(function ($q) {
+            $q->where('selected_request_id', '!=', null);
+        })->get();
     }
 
     public function ownFinishedProjects()
     {
-        $own = $this->createdProjects()->get();
-        return $own->filter(function (Project $project) {
-            return $project->status == Project::FINISHED_STATUS ||
-                $project->status == Project::CANCELED_STATUS;
-        });
+        return $this->createdProjects()->with(['freelancer'])->where(function ($q) {
+            $q->whereIn('status', [Project::FINISHED_STATUS, Project::CANCELED_STATUS]);
+        })->get();
     }
 
     public function ownInProgressProjects()
     {
-        $own = $this->createdProjects()->get();
-        return $own->filter(function (Project $project) {
-            return $project->status == Project::STARTED_STATUS || $project->status == Project::DISPUTED_STATUS;
-        });
+        return $this->createdProjects()->with(['freelancer'])->where(function ($q) {
+            $q->whereIn('status', [Project::STARTED_STATUS, Project::DISPUTED_STATUS]);
+        })->get();
     }
 
     public function ownOnlyCreatedProjects()
     {
-        $own = $this->createdProjects()->get();
-        return $own->filter(function (Project $project) {
-            return $project->status == Project::CREATED_STATUS;
-        });
+        return $this->createdProjects()->with(['freelancer'])->where(function ($q) {
+            $q->where('status', Project::CREATED_STATUS);
+        })->get();
     }
 
     public function withdrawsAmount()

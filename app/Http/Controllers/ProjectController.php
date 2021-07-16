@@ -353,31 +353,35 @@ class ProjectController extends Controller
         }
         $min_price = $request->get('min_price');
         $max_price = $request->get('max_price');
-        $projects = Project::all()->where('status', '=', Project::PUBLISHED_STATUS)->sortByDesc('created_at')->filter(function (Project $project) {
-            return Carbon::parse($project->created_at)->diffInDays(Carbon::now()) < 14;
-        });
+        $exp = Carbon::now()->subDays(14);
+        $projects = Project::query()->with(['properties', 'skills'])->where('status', '=', Project::PUBLISHED_STATUS)
+            ->orderByDesc('created_at')->where(function ($query) use($exp){
+                $query->whereDate('created_at', '>', $exp);
+            });
         if($term) {
-            $projects = $projects->filter(function (Project $project) use($term){
-                return $this->isLike($project->title, $term);
+            $projects = $projects->where(function ($query) use($term) {
+                $query->where('title', 'like', '%'.$term.'%');
             });
         }
         if($min_price) {
-            $projects = $projects->filter(function (Project $project) use($min_price){
-                return $project->min_price >= $min_price;
+            $projects = $projects->where(function ($query) use($min_price) {
+                $query->where('min_price', '>=', $min_price);
             });
         }
         if($max_price) {
-            $projects = $projects->filter(function (Project $project) use($max_price){
-                return $project->max_price <= $max_price;
+            $projects = $projects->where(function ($query) use($max_price) {
+                $query->where('max_price', '>=', $max_price);
             });
         }
         if($skills && count($skills) > 0) {
-            $projects = $projects->filter(function (Project $project) use($skills) {
-                $ids = $project->skills->pluck('id')->toArray();
-                return count(array_intersect($ids, $skills)) > 0;
+            $projects = $projects->where(function ($query) use ($skills) {
+                $query->whereHas('skills', function ($q) use ($skills) {
+                    $q->whereIn('skills.id', $skills);
+                });
             });
         }
-       return new ProjectSearchCollectionResource($this->paginateCollection($projects, $limit, 'page'));
+       return new ProjectSearchCollectionResource($projects->paginate(10));
+//       return new ProjectSearchCollectionResource($this->paginateCollection($projects->get(), $limit, 'page'));
     }
 
     public function finishProject($id)
@@ -388,12 +392,14 @@ class ProjectController extends Controller
         $project = $this->projectRepository->findOneOrFail($id);
         if($auth->can('finish-project', $project)) {
             $request = ProjectRequest::findOrFail($project->selected_request_id);
-            $count = SecurePayment::all()->where('project_id', '=', $project->id)
-                ->where('request_id', '=', $request->id)
-                ->filter(function (SecurePayment $p) {
-               return $p->status == SecurePayment::CREATED_STATUS ||
-                   $p->status == SecurePayment::ACCEPTED_STATUS ||
-                   $p->status == SecurePayment::PAYED_STATUS;
+            $count = SecurePayment::query()->where(function ($q) use($project, $request) {
+                $q->where('project_id', '=', $project->id);
+                $q->where('request_id', '=', $request->id);
+                $q->whereIn('status', [
+                    SecurePayment::CREATED_STATUS,
+                    SecurePayment::ACCEPTED_STATUS,
+                    SecurePayment::PAYED_STATUS
+                ]);
             })->count();
             if($count != 0) {
                 return response()->json(['errors' => ['project' => ['پرداخت های امن تایید نشده یا پرداخت نشده یا آزاد نشده دارید']]], 422);
