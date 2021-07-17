@@ -26,7 +26,7 @@ class UpdateProfileRequest extends FormRequest
         return [
             'position' => 'required|string|min:3',
             'gender' => 'nullable|numeric|min:0',
-            'description' => 'nullable|string|min:1',
+            'description' => 'nullable|string',
             'bio' => 'nullable|string',
             'marital_status' => 'nullable|boolean',
             'birth_date' => 'nullable',

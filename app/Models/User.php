@@ -7,7 +7,9 @@ use App\ModelFilters\UserFilter;
 use Carbon\Carbon;
 use EloquentFilter\Filterable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Mail;
@@ -234,17 +236,17 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(Post::class);
     }
 
-    public function stories()
+    public function stories(): HasMany
     {
-        return $this->hasMany(Story::class);
+        return $this->hasMany(Story::class)->where('created_at', '>', Carbon::now()->subHours(24));
     }
 
-    public function availableStories()
+    public function availableStories(): HasMany
     {
-        return $this->hasMany(Story::class);
+        return $this->hasMany(Story::class)->where('stories.created_at', '>', Carbon::now()->subHours(24));
     }
 
-    public function lastStories()
+    public function lastStories(): Collection
     {
         return $this->stories()->where('created_at', '>', Carbon::now()->subHours(24))->get();
     }

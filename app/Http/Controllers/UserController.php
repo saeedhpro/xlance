@@ -62,6 +62,7 @@ use App\Models\SecurePayment;
 use App\Models\SelectedPlan;
 use App\Models\Setting;
 use App\Models\Skill;
+use App\Models\TempSecurePayment;
 use App\Models\Transaction;
 use App\Models\Upload;
 use App\Models\User;
@@ -622,11 +623,12 @@ class UserController extends Controller
         if($requestForProjectRequest->has('new_secure_payments')) {
             $securePayments = $requestForProjectRequest->get('new_secure_payments');
             foreach ($securePayments as $payment) {
-                $request->securePayments()->create([
+                TempSecurePayment::create([
                     'title' => $payment['title'],
                     'price' => $payment['price'],
                     'status' => SecurePayment::IN_PAY_STATUS,
                     'project_id' => $project->id,
+                    'request_id' => $request->id,
                     'user_id' => $user->id,
                     'to_id' => $project->employer->id,
                     'is_first' => true,
