@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Request extends Model
 {
@@ -32,23 +34,28 @@ class Request extends Model
         'to_id',
     ];
 
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function to()
+    public function to(): BelongsTo
     {
         return $this->belongsTo(User::class, 'to_id', 'id');
     }
 
-    public function project()
+    public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
     }
 
-    public function securePayments()
+    public function securePayments(): HasMany
     {
         return $this->hasMany(SecurePayment::class);
+    }
+
+    public function tempSecurePayments(): HasMany
+    {
+        return $this->hasMany(TempSecurePayment::class);
     }
 }

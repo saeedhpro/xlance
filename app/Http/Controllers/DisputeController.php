@@ -110,6 +110,27 @@ class DisputeController extends Controller
                 ]);
                 $nonce = $this->getNonce();
                 broadcast(new NewMessageNotificationEvent($freelancer, $freelancer->newMessagesCount(), $nonce));
+                $project->notifications()->create([
+                    'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.',
+                    'type' => Notification::ِDISPUTE,
+                    'user_id' => $employer->id,
+                    'notifiable_id' => $project->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$freelancer]));
+                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                    $q->where('name', '=', 'admin');
+                })->get();
+                $freelancer = $project->freelancer;
+                foreach ($admins as $admin) {
+                    $project->notifications()->create([
+                        'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.',
+                        'type' => Notification::ADMIN_PROJECT,
+                        'user_id' => $admin->id,
+                        'image_id' => null
+                    ]);
+                    Notification::sendNotificationToUsers(collect([$admin]));
+                }
             } else {
                 $message = Message::create([
                     'user_id' => $auth->id,
@@ -120,36 +141,15 @@ class DisputeController extends Controller
                 ]);
                 $nonce = $this->getNonce();
                 broadcast(new NewMessageNotificationEvent($employer, $employer->newMessagesCount(), $nonce));
-            }
-            $project->notifications()->create(array(
-                'text' =>  'یک اختلاف برای پروژه '. $project->title .' ایجاد شد',
-                'type' => Notification::PROJECT,
-                'user_id' => $freelancer->id,
-                'image_id' => null
-            ));
-            $project->notifications()->create(array(
-                'text' => 'یک اختلاف برای پروژه '. $project->title .' ایجاد شد',
-                'type' => Notification::PROJECT,
-                'user_id' => $employer->id,
-                'image_id' => null
-            ));
-            $admins = User::all()->filter(function (User $u){
-                return $u->hasRole('admin');
-            })->pluck('id');
-            $ids = collect($admins->values());
-            $ids->push($auth->id, $freelancer->id, $employer->id);
-            foreach ($ids as $id) {
-                $project->notifications()->create(array(
-                    'text' =>  'یک اختلاف برای پروژه '. $project->title .' ایجاد شد',
-                    'type' => Notification::PROJECT,
-                    'user_id' => $id,
+                $project->notifications()->create([
+                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.',
+                    'type' => Notification::ِDISPUTE,
+                    'user_id' => $freelancer->id,
+                    'notifiable_id' => $project->id,
                     'image_id' => null
-                ));
+                ]);
+                Notification::sendNotificationToUsers(collect([$employer]));
             }
-            $users = User::all()->whereIn('id', $ids->toArray());
-            $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-            Notification::sendNotificationToAll($emails->toArray(), 'یک اختلاف برای پروژه '. $project->title .' ایجاد شد', 'یک اختلاف برای پروژه '. $project->title .' ایجاد شد', null);
-            Notification::sendNotificationToUsers($users);
             return new DisputeResource($dispute);
         } else {
             return $this->accessDeniedResponse();

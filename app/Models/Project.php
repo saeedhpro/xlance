@@ -7,6 +7,7 @@ use EloquentFilter\Filterable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 class Project extends Model
 {
@@ -101,7 +102,17 @@ class Project extends Model
 
     public function requests()
     {
-        return $this->hasMany(Request::class);
+        return $this->hasMany(Request::class)
+            ->where('status', '!=', Request::IN_PAY_STATUS);
+    }
+
+    public function sortedRequests()
+    {
+        /** @var Collection $reqs */
+        $reqs = $this->requests()->get();
+        return $reqs->sort(function (Request $a, $key) {
+            return $a->is_sponsored != 1;
+        })->values();
     }
 
     public function priceRequests()

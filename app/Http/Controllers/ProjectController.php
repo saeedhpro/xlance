@@ -140,6 +140,28 @@ class ProjectController extends Controller
             $wallet = $user->wallet;
             $wallet->setBalance((int) ($balance - $price));
 //            broadcast(new NewConversationEvent($user, $conversation));
+            $project->notifications()->create([
+                'text' => 'پروژه '. $project->title .' ایجاد شد.',
+                'type' => Notification::PROJECT,
+                'user_id' => $user->id,
+                'notifiable_id' => $project->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$user]));
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            $employer = $project->employer;
+            $freelancer = $project->freelancer;
+            foreach ($admins as $admin) {
+                $project->notifications()->create([
+                    'text' => "$employer->first_name $employer->last_name پروژه ی $project->title را برای $freelancer->first_name $freelancer->last_name ایجاد کرد.",
+                    'type' => Notification::ADMIN_PROJECT,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
             return new ProjectResource($project);
         }
     }
@@ -405,6 +427,26 @@ class ProjectController extends Controller
                 return response()->json(['errors' => ['project' => ['پرداخت های امن تایید نشده یا پرداخت نشده یا آزاد نشده دارید']]], 422);
             } else {
                 $finished = $this->projectRepository->finishProject($project);
+                $project->notifications()->create([
+                    'text' => $auth->first_name . '' . $auth->last_name . 'برای پروژه ' . $project->title . ' اتمام پروژه را تایید کرده است.',
+                    'type' => Notification::ِDISPUTE,
+                    'user_id' => $project->freelancer->id,
+                    'notifiable_id' => $project->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$project->freelancer]));
+                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                    $q->where('name', '=', 'admin');
+                })->get();
+                foreach ($admins as $admin) {
+                    $project->notifications()->create([
+                        'text' => $auth->first_name . '' . $auth->last_name . 'برای پروژه ' . $project->title . ' اتمام پروژه را تایید کرده است.',
+                        'type' => Notification::ADMIN_PROJECT,
+                        'user_id' => $admin->id,
+                        'image_id' => null
+                    ]);
+                    Notification::sendNotificationToUsers(collect([$admin]));
+                }
                 return response()->json(['finished' => $finished], 200);
             }
         } else {
@@ -466,45 +508,25 @@ class ProjectController extends Controller
         /** @var User $freelancer */
         $freelancer = User::find($freelancer_id);
         if($freelancer) {
-            /** @var User $employer */
-            $employer = $project->employer;
-            $admins = User::all()->filter(function (User $u){
-                return $u->hasRole('admin');
-            })->pluck('id');
-            $ids = collect($admins->values());
-            $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-            $users = User::all()->whereIn('id', $ids->toArray());
-            Notification::sendNotificationToAll($emails, 'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای '. $freelancer->username .' ایجاد کرد', 'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای '. $freelancer->username .' ایجاد کرد', null);
-            Notification::sendNotificationToUsers($users);
-            $project->notifications()->create(array(
-                'title' => 'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای شما ایجاد کرد',
-                'text' => 'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای شما ایجاد کرد',
+            /** @var User $emp */
+            $emp = $project->employer()->get();
+            $emp->notifs()->create([
+                'text' => 'پروژه ی '. $project->title .' برای '. $freelancer->first_name . ' ' . $freelancer->last_name .' ایجاد شد.',
+                'type' => Notification::PROJECT,
+                'user_id' => $emp->id,
+                'notifiable_id' => $emp->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$emp]));
+
+            $freelancer->notifs()->create([
+                'text' => $emp->first_name . ' ' . $emp->last_name . ' پروژه ی ' . $project->title . ' را برای شما ایجاد کرده است',
                 'type' => Notification::PROJECT,
                 'user_id' => $freelancer->id,
-                'image_id' => $freelancer->profile->avatar ? $freelancer->profile->avatar->id : null
-            ));
-            Notification::sendNotificationToAll($emails,  'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای شما ایجاد کرد',  'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای شما ایجاد کرد', null);
-            $users = User::all()->whereIn('id', [$freelancer_id]);
-            Notification::sendNotificationToUsers($users);
-            $project->notifications()->create(array(
-                'title' => 'درخواست انجام پروژه '. $project->title .' برای کاربر ' . $freelancer->username . ' ارسال شد',
-                'text' => 'درخواست انجام پروژه '. $project->title .' برای کاربر ' . $freelancer->username . ' ارسال شد',
-                'type' => Notification::PROJECT,
-                'user_id' => $employer->id,
-                'image_id' => $employer->profile->avatar ? $employer->profile->avatar->id : null
-            ));
-            $users = User::all()->whereIn('id', [$employer->id]);
-            foreach ($ids as $id) {
-                $project->notifications()->create(array(
-                    'title' => 'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای '. $freelancer->username .' ایجاد کرد',
-                    'text' => 'کارفرمای ' . $employer->username . 'پروژه '. $project->title .' برای '. $freelancer->username .' ایجاد کرد',
-                    'type' => Notification::PROJECT,
-                    'user_id' => $id,
-                    'image_id' => $freelancer->profile->avatar ? $freelancer->profile->avatar->id : null
-                ));
-            }
-            Notification::sendNotificationToUsers($users);
-            Notification::sendNotificationToAll($emails, 'پروژه '. 'پروژه '. $project->title .' برای ایجاد شد', 'پروژه '. $project->title .' برای ایجاد شد', null);
+                'notifiable_id' => $freelancer->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$freelancer]));
         }
     }
 

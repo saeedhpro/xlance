@@ -170,15 +170,14 @@ class PostRepository extends BaseRepository implements PostInterface
         $auth = auth()->user();
         $post = $this->findOneOrFail($id);
         $auth->like($post);
-        $notification = $post->notifications()->create(array(
-            'text' => 'پست لایک شد',
+        $post->notifications()->create([
+            'text' => $auth->first_name . '' . $auth->last_name . ' پست شما را پسندید',
             'type' => Notification::POST,
             'user_id' => $post->user->id,
+            'notifiable_id' => $post->id,
             'image_id' => $post->media ? $post->media->id : null
-        ));
-        $users = collect($post->user);
-        Notification::sendNotificationToAll([$post->user->email], 'پست لایک شد', 'پست لایک شد', null);
-        Notification::sendNotificationToUsers($users);
+        ]);
+        Notification::sendNotificationToUsers(collect([$post->user]));
         return true;
     }
 

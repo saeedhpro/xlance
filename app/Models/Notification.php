@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Events\NewNotificationEvent;
+use App\Http\Resources\NotifiableUserResource;
 use App\Http\Resources\PortfolioResource;
 use App\Http\Resources\PostResource;
 use App\Http\Resources\ProjectResource;
@@ -19,33 +20,6 @@ class Notification extends Model
 {
     use HasFactory, SoftDeletes;
 
-    const PROFILE_BUSINESS_TYPE = 'profile_business';
-    const REQUEST_COUNT_TYPE = 'request_count';
-    const PROJECT_DISPUTED_TYPE = 'project_disputed';
-    const POST_ACCEPTED_TYPE = 'post_accepted';
-    const POST_REJECTED_TYPE = 'post_rejected';
-    const POST_CREATED_TYPE = 'post_created';
-    const STORY_CREATED_TYPE = 'story_created';
-    const STORY_ACCEPTED_TYPE = 'story_accepted';
-    const STORY_REJECTED_TYPE = 'story_rejected';
-    const USER_BLOCKED_TYPE = 'user_blocked';
-    const POST_LIKED_TYPE = 'post_liked';
-    const POST_COMMENTED_TYPE = 'post_commented';
-    const PORTFOLIO_LIKED_TYPE = 'portfolio_liked';
-    const FOLLOW_TYPE = 'follow';
-    const UNFOLLOW_TYPE = 'unfollow';
-    const PAYMENT_PAYED_TYPE = 'payment_payed';
-    const SECURE_PAYMENT_CREATED_TYPE = 'secure_payment_created';
-    const SECURE_PAYMENT_ACCEPTED_TYPE = 'secure_payment_accepted';
-    const SECURE_PAYMENT_PAYED_TYPE = 'secure_payment_payed';
-    const PROJECT_PUBLISHED_TYPE = 'project_published';
-    const PROJECT_REJECTED_TYPE = 'project_rejected';
-    const PROJECT_CANCELED_TYPE = 'project_canceled';
-    const PROJECT_FINISHED_TYPE = 'project_finished';
-    const PROJECT_CREATED_FOR_FREELANCER = 'project_created_for_freelancer';
-    const REQUEST_ACCEPTED_TYPE = 'request_accepted';
-    const REQUEST_RECEIVED_TYPE = 'request_received';
-
     const POST = 'post';
     const STORY = 'story';
     const PROJECT = 'project';
@@ -53,6 +27,35 @@ class Notification extends Model
     const EMPLOYER = 'employer';
     const PORTFOLIO = 'portfolio';
     const WITHDRAW = 'withdraw';
+    const SKILLS = 'skills';
+    const CREATE_PROJECT = 'create_project';
+    const AVATAR_DENIED = 'avatar_denied';
+    const AVATAR_ACCEPTED = 'avatar_accepted';
+    const BG_DENIED = 'bg_denied';
+    const BG_ACCEPTED = 'bg_accepted';
+    const NATIONAL_DENIED = 'national_denied';
+    const NATIONAL_ACCEPTED = 'national_accepted';
+    const PORTFOLIO_DENIED = 'portfolio_denied';
+    const PORTFOLIO_ACCEPTED = 'portfolio_accepted';
+    const PASSWORD_CHANGED = 'password_changed';
+    const FOLLOW = 'follow';
+    const RATE_FREELANCER = 'rate_freelancer';
+    const ِDISPUTE = 'dispute';
+    const WALLET = 'wallet';
+    const SHEBA_ACCEPTED = 'sheba_accepted';
+    const SHEBA_DENIED = 'sheba_denied';
+    const PACKAGE = 'package';
+    const REGISTER = 'register';
+    const ADMIN_REGISTER = 'admin_register';
+    const ADMIN_AVATAR_CREATED = 'admin_avatar_created';
+    const ADMIN_BG_CREATED = 'admin_bg_created';
+    const ADMIN_NATIONAL_CREATED = 'admin_national_created';
+    const ADMIN_PORTFOLIO_CREATED = 'admin_portfolio_created';
+    const ADMIN_PROJECT = 'admin_project';
+    const ADMIN_POST = 'admin_post';
+    const ADMIN_RECORDS = 'admin_records';
+    const ADMIN_SHEBA = 'admin_sheba';
+    const ADMIN_PACKAGE = 'admin_package';
 
     protected $fillable = [
         'title',
@@ -90,7 +93,7 @@ class Notification extends Model
                 return new ProjectResource($this->notifiable);
             case Notification::EMPLOYER:
             case Notification::FREELANCER:
-                return new UserResource($this->notifiable);
+                return new NotifiableUserResource($this->notifiable);
             case Notification::PORTFOLIO:
                 return new PortfolioResource($this->notifiable);
             default:

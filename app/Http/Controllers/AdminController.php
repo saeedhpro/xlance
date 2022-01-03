@@ -76,29 +76,26 @@ class AdminController extends Controller
                    'verified' => $request->accepted,
                    'status' => $request->accepted ? Project::PUBLISHED_STATUS : Project::REJECTED_STATUS
                ]);
-               $project->notifications()->create(array(
-                   'text' => $request->accepted ? 'پروژه '. $project->title .' تایید شد' : 'پروژه '. $project->title .' رد شد',
-                   'type' => Notification::PROJECT,
-                   'user_id' => $auth->id,
-                   'image_id' => null
-               ));
-               $admins = User::all()->filter(function (User $u){
-                   return $u->hasRole('admin');
-               })->pluck('id');
-               $ids = collect($admins->values());
-               $ids->push($project->employer->id);
-               foreach ($ids as $id) {
-                   $project->notifications()->create(array(
-                       'text' => $request->accepted ? 'پروژه '. $project->title .' تایید شد' : 'پروژه '. $project->title .' رد شد',
+               /** @var User $user */
+               $user = $project->employer()->get();
+               if($request->accepted) {
+                   $project->notifications()->create([
+                       'text' => 'پروژه '. $project->title .' تایید شد.',
                        'type' => Notification::PROJECT,
-                       'user_id' => $id,
+                       'user_id' => $user->id,
+                       'notifiable_id' => $project->id,
                        'image_id' => null
-                   ));
+                   ]);
+               } else {
+                   $project->notifications()->create([
+                       'text' => 'پروژه '. $project->title .'  رد شد. لطفا این راهنما را مطالعه کنید و سپس پروژه را مجدد ایجاد کنید.',
+                       'type' => Notification::PROJECT,
+                       'user_id' => $user->id,
+                       'notifiable_id' => $project->id,
+                       'image_id' => null
+                   ]);
                }
-               $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-               $users = User::all()->whereIn('id', $ids->toArray());
-               Notification::sendNotificationToAll($emails->toArray(), $request->accepted ? 'پروژه '. $project->title .' تایید شد' : 'پروژه '. $project->title .' رد شد', $request->accepted ? 'پروژه '. $project->title .' تایید شد' : 'پروژه '. $project->title .' رد شد', null);
-               Notification::sendNotificationToUsers($users);
+               Notification::sendNotificationToUsers(collect([$user]));
                return new ProjectResource($project);
            } else {
                return response()->json(['errors' => ['project' => 'تنها می توانید پروژه های تازه ایجاد شده را تایید کنید']], 422);
@@ -206,27 +203,24 @@ class AdminController extends Controller
             $history->save();
             if($request->accepted) {
                 $wallet->forceWithdraw((int)$withdraw->amount);
-                $text = 'درخواست برداشت واریز شد!';
-            } else {
-                $text = 'درخواست برداشت رد شد!';
-            }
-            $admins = User::all()->filter(function (User $u){
-                return $u->hasRole('admin');
-            })->pluck('id');
-            $ids = collect($admins->values());
-            $ids->push($user->id);
-            foreach ($ids as $id) {
-                $withdraw->notifications()->create(array(
-                    'text' => $text,
+                $user->notifs()->create([
+                    'text' => 'درخواست برداشت به مبلغ '. $withdraw->amount .' توسط ادمین تایید و 448 ساعت آینده برای شما واریز می شود.',
                     'type' => Notification::WITHDRAW,
-                    'user_id' => $id,
-                    'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
-                ));
+                    'user_id' => $user->id,
+                    'notifiable_id' => $user->id,
+                    'image_id' =>  null
+                ]);
+            } else {
+                $user->notifs()->create([
+                    'text' => 'درخواست برداشت به مبلغ '. $withdraw->amount .' توسط ادمین رد شد.',
+                    'type' => Notification::WITHDRAW,
+                    'user_id' => $user->id,
+                    'notifiable_id' => $user->id,
+                    'image_id' =>  null
+                ]);
             }
-            $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-            $users = User::all()->whereIn('id', $ids->toArray());
-            Notification::sendNotificationToAll($emails->toArray(), 'درخواست برداشت واریز شد!', 'درخواست برداشت واریز شد!', null);
-            Notification::sendNotificationToUsers($users);
+
+            Notification::sendNotificationToUsers(collect([$user]));
             return new WithdrawRequestResource($withdraw);
         } else {
             return  $this->accessDeniedResponse();
@@ -263,6 +257,24 @@ class AdminController extends Controller
             $portfolio->update([
                 'status' => $request->accepted ? Portfolio::ACCEPTED_STATUS : Portfolio::REJECTED_STATUS
             ]);
+            /** @var User $user */
+            $user = $portfolio->user()->get();
+            if ($request->get('accepted')) {
+                $user->notifs()->create([
+                    'text' => 'نمونه کار شما تایید شد.',
+                    'type' => Notification::PORTFOLIO_ACCEPTED,
+                    'user_id' => $user->id,
+                    'image_id' => null
+                ]);
+            } else {
+                $user->notifs()->create([
+                    'text' => 'نمونه کار شما رد شد . لطفا این راه نما را مطالعه کنید و سپس نمونه کار خود را ارسال کنید.',
+                    'type' => Notification::PORTFOLIO_DENIED,
+                    'user_id' => $user->id,
+                    'image_id' => null
+                ]);
+            }
+            Notification::sendNotificationToUsers(collect([$user]));
             return new PortfolioResource($portfolio);
         } else {
             return  $this->accessDeniedResponse();
@@ -544,32 +556,13 @@ class AdminController extends Controller
             try {
                 $amount = (int)$request->get('amount') / 10;
                 $wallet->deposit($amount);
-                $body = 'حساب شما به مبلغ '. $amount .' تومان شارژ شد';
-                $user->notifs()->create(array(
-                    'text' => $body,
-                    'type' => Notification::EMPLOYER,
+                $user->notifs()->create([
+                    'text' => 'افزایش موجودی به مبلغ '. $amount .' با موفقیت انجام شد.',
+                    'type' => Notification::WALLET,
                     'user_id' => $user->id,
-                    'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
-                ));
-                $admins = User::all()->filter(function (User $u){
-                    return $u->hasRole('admin');
-                })->pluck('id');
-                $ids = collect($admins->values());
-                $notificationBody =  'حساب کاربر '. $user->username .' به مبلغ '. $amount .' تومان شارژ شد';
-                foreach ($ids as $id) {
-                    $user->notifs()->create(array(
-                        'text' => $notificationBody,
-                        'type' => Notification::EMPLOYER,
-                        'user_id' => $id,
-                        'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
-                    ));
-                }
-                $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-                $users = User::all()->whereIn('id', $ids->toArray());
-                Notification::sendNotificationToAll($emails->toArray(), $notificationBody, $notificationBody, null);
-                $emails = User::all()->whereIn('id', [$user->id])->pluck('email');
-                Notification::sendNotificationToAll($emails->toArray(), $body, $body, null);
-                Notification::sendNotificationToUsers($users);
+                    'notifiable_id' => $user->id,
+                    'image_id' =>  null
+                ]);
                 Notification::sendNotificationToUsers(collect([$user]));
                 return true;
             } catch (UnacceptedTransactionException $e) {

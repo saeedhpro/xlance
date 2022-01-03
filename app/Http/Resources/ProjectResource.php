@@ -35,7 +35,7 @@ class ProjectResource extends JsonResource
             'request_select_date' => Carbon::parse($this->request_select_date)->diffInDays(Carbon::now()),
             'requested_by_me' => $this->requestedByMe(),
             'accept_freelancer_request' => new AcceptFreelancerResource($this->acceptFreelancerRequest),
-            'requests' => new RequestCollectionResource($this->requests),
+            'requests' => new RequestCollectionResource($this->sortedRequests()),
             'properties' => new PropertyCollectionResource($this->properties),
             'skills' => $this->skills,
             'freelancer' => new SimpleUserResource($this->freelancer),

@@ -28,6 +28,7 @@ class Transaction extends Model
         'transaction_id',
         'request_package_id',
         'user_id',
+        'request_id',
         'project_id',
         'secure_payment_id'
     ];
@@ -40,6 +41,11 @@ class Transaction extends Model
     public function project()
     {
         return $this->belongsTo(Project::class, 'project_id', 'id');
+    }
+
+    public function request()
+    {
+        return $this->belongsTo(Request::class, 'request_id', 'id');
     }
 
     public function package()

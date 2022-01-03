@@ -94,6 +94,19 @@ class PostController extends Controller
             'caption',
             'image_id'
         ]));
+        $user = auth()->user();
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        foreach ($admins as $admin) {
+            $user->notifs()->create([
+                'text' => "$user->first_name $user->last_name پست جدید ایجاد کرده است.",
+                'type' => Notification::ADMIN_POST,
+                'user_id' => $admin->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
+        }
         return new PostResource($post);
     }
 
@@ -194,15 +207,14 @@ class PostController extends Controller
             'parent_id',
             'user_id'
         ]));
-        $post->notifications()->create(array(
-            'text' => 'کاربر ' . $user->username . ' برای پست شما کامنت قرار داد',
+        $post->notifications()->create([
+            'text' => $user->first_name . '' . $user->last_name . ' برای پست شما کامنت قرار داد',
             'type' => Notification::POST,
             'user_id' => $post->user->id,
+            'notifiable_id' => $post->id,
             'image_id' => $post->media ? $post->media->id : null
-        ));
-        $users = User::all()->whereIn('id', [$post->user->id]);
-        Notification::sendNotificationToAll([$post->user->email],  'کاربر ' . $user->username . ' برای پست شما کامنت قرار داد',  'کاربر ' . $user->username . ' برای پست شما کامنت قرار داد', null);
-        Notification::sendNotificationToUsers($users);
+        ]);
+        Notification::sendNotificationToUsers(collect([$post->user]));
         return new CommentResource($comment);
     }
 

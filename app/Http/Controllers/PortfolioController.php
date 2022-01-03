@@ -8,6 +8,7 @@ use App\Http\Requests\UpdatePortfolioRequest;
 use App\Http\Resources\AssetResource;
 use App\Http\Resources\PortfolioResource;
 use App\Interfaces\PortfolioInterface;
+use App\Models\Notification;
 use App\Models\Portfolio;
 use App\Models\Upload;
 use App\Models\User;
@@ -18,6 +19,7 @@ use Illuminate\Http\Request;
 class PortfolioController extends Controller
 {
     protected $portfolioRepository;
+
     public function __construct(PortfolioInterface $portfolioRepository)
     {
         $this->portfolioRepository = $portfolioRepository;
@@ -49,6 +51,7 @@ class PortfolioController extends Controller
      */
     public function store(StorePortfolioRequest $request)
     {
+        /** @var User $auth */
         $auth = auth()->user();
         $tags = $this->getTags($request);
         $attributes = array(
@@ -62,8 +65,20 @@ class PortfolioController extends Controller
         $portfolio = $this->portfolioRepository->create($attributes);
         $portfolio->skills()->sync($request->get('skills'));
         $portfolio = $this->syncAttachments($request, $portfolio);
-        if($request->has('new_images')) {
+        if ($request->has('new_images')) {
             $portfolio = $this->syncImages($request, $portfolio);
+        }
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        foreach ($admins as $admin) {
+            $auth->notifs()->create([
+                'text' => 'کاربر ' . $auth->first_name . ' ' . $auth->last_name . ' نمونه کار جدید ایجاد کرد.',
+                'type' => Notification::ADMIN_PORTFOLIO_CREATED,
+                'user_id' => $admin->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
         }
         return new PortfolioResource($portfolio);
     }
@@ -71,10 +86,10 @@ class PortfolioController extends Controller
     private function syncAttachments(Request $request, Portfolio $portfolio)
     {
         $new_ids = $request->get('new_attachments');
-        if($new_ids != null && count($new_ids) > 0) {
+        if ($new_ids != null && count($new_ids) > 0) {
             foreach ($new_ids as $new_id) {
                 $upload = Upload::find($new_id);
-                if($upload) {
+                if ($upload) {
                     $portfolio->attachments()->create([
                         'name' => $upload->name,
                         'path' => $upload->path,
@@ -99,7 +114,7 @@ class PortfolioController extends Controller
         $user = auth()->user();
         /** @var Portfolio $portfolio */
         $portfolio = $this->portfolioRepository->findOneOrFail($id);
-        if($user->can('update-portfolio', $portfolio)) {
+        if ($user->can('update-portfolio', $portfolio)) {
             $tags = $this->getTags($request);
             $attributes = array(
                 'title' => $request->title,
@@ -127,7 +142,7 @@ class PortfolioController extends Controller
         $user = auth()->user();
         /** @var Portfolio $portfolio */
         $portfolio = $this->portfolioRepository->findOneOrFail($id);
-        if($user->can('destroy-portfolio', $portfolio)) {
+        if ($user->can('destroy-portfolio', $portfolio)) {
             try {
                 $this->portfolioRepository->delete($id);
                 return \response()->json(['success' => 'نمونه کار با موفقیت حذف شد', 'id' => $id], 200);
@@ -139,11 +154,11 @@ class PortfolioController extends Controller
         }
     }
 
-    private function getTags(FormRequest $request) : string
+    private function getTags(FormRequest $request): string
     {
-        if($request->has('tags')){
+        if ($request->has('tags')) {
             $tag_list = $request->get('tags');
-            if(!empty($tag_list)) {
+            if (!empty($tag_list)) {
                 return implode(',', $tag_list);
             }
         }
@@ -153,10 +168,10 @@ class PortfolioController extends Controller
     private function syncImages(Request $request, Portfolio $portfolio)
     {
         $new_ids = $request->get('new_images');
-        if(count($new_ids) > 0) {
+        if (count($new_ids) > 0) {
             foreach ($new_ids as $new_id) {
                 $upload = Upload::find($new_id);
-                if($upload) {
+                if ($upload) {
                     $portfolio->images()->create([
                         'name' => $upload->name,
                         'path' => $upload->path,
@@ -168,12 +183,14 @@ class PortfolioController extends Controller
         return $portfolio;
     }
 
-    public function addImage(AddPortfolioImageRequest $request, $id) {
+    public function addImage(AddPortfolioImageRequest $request, $id)
+    {
         $image = $this->portfolioRepository->addImage($request, $id);
         return new AssetResource($image);
     }
 
-    public function destroyImage($id, $image_id){
+    public function destroyImage($id, $image_id)
+    {
         return $this->portfolioRepository->destroyImage($id, $image_id);
     }
 }

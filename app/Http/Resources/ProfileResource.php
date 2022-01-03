@@ -34,6 +34,8 @@ class ProfileResource extends JsonResource
             'new_avatar' => new AssetResource($this->newAvatar()->first()),
             'bg' => new AssetResource($this->background()->first()),
             'new_bg' => new AssetResource($this->newBackground()->first()),
+            'new_national_card' => new AssetResource($this->newNationalCard()->first()),
+            'new_national_card_id' => $this->new_national_card_id
         ];
     }
 }

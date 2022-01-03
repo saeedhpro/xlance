@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TempSecurePayment extends Model
 {
@@ -17,4 +18,9 @@ class TempSecurePayment extends Model
         'project_id',
         'is_first',
     ];
+
+    public function request(): BelongsTo
+    {
+        return $this->belongsTo(Request::class);
+    }
 }

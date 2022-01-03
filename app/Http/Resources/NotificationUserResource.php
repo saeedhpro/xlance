@@ -18,7 +18,7 @@ class NotificationUserResource extends JsonResource
             'id' => $this->id,
             'username' => $this->username,
             'roles' => $this->getRoleNames(),
-            'profile' => new ProfileResource($this->profile),
+//            'profile' => new ProfileResource($this->profile),
         ];
     }
 }

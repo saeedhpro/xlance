@@ -25,6 +25,9 @@ use App\Http\Controllers\StoryController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\UploadController;
 use App\Http\Controllers\UserController;
+use App\Models\Request;
+use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 
@@ -102,13 +105,6 @@ Route::prefix('/users')->group(function () {
     Route::get('/employers', [UserController::class, 'employers'])->name('users.user.employers');
 });
 
-//Route::prefix('/users')->group(function () {
-//    Route::get('/', [UserController::class, 'all'])->name('users.user.all');
-//    Route::get('/{user}', [UserController::class, 'show'])->middleware('auth:api')->name('users.user.show');
-//   Route::get('/{user}/posts', [UserController::class, 'posts'])->name('users.user.posts');
-////    Route::get('/{user}/posts/liked', [UserController::class, 'userLikedPosts'])->name('users.user.userLikedPosts');
-////    Route::get('/{user}/posts/saved', [UserController::class, 'userSavedPosts'])->name('users.user.userSavedPosts');
-//=======
 Route::prefix('/users')->middleware('auth:api')->group(function () {
     Route::get('/', [UserController::class, 'all'])->name('users.user.all');
     Route::get('/{user}', [UserController::class, 'show'])->name('users.user.show');
@@ -196,7 +192,7 @@ Route::prefix('/user')->middleware('auth:api')->group(function () {
         Route::get('/{project}/accepted/{accept}', [UserController::class, 'freelancerGetAcceptProjectRequest'])->name('user.projects.accept.get');
         Route::post('/{project}/accepted/{accept}/accept', [UserController::class, 'freelancerAcceptOrRejectRequest'])->name('user.projects.freelancerAcceptOrRejectRequest');
         Route::post('/{project}/attachments', [ProjectController::class, 'addAttachment'])->name('user.projects.addAttachment');
-        Route::delete('/{project}/attachments/{attachment}', [ProjectController::class, 'destroyAttachment'])->name('user.projects.destroyAttachment');
+        Route::delete('/{project}/attachments/{attachment}', [PrtojectController::class, 'destroyAttachment'])->name('user.projects.destroyAttachment');
     });
     Route::post('/follow', [UserController::class, 'follow'])->name('user.follow');
     Route::post('/unfollow', [UserController::class, 'unFollow'])->name('user.unFollow');

@@ -71,6 +71,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request as HttpRequest;
+use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Facades\Hash;
 use MannikJ\Laravel\Wallet\Models\Wallet;
 use Shetabit\Multipay\Invoice;
@@ -79,6 +80,7 @@ use Shetabit\Payment\Facade\Payment;
 class UserController extends Controller
 {
     protected $userRepository;
+
     public function __construct(UserInterface $userRepository)
     {
         $this->userRepository = $userRepository;
@@ -89,6 +91,34 @@ class UserController extends Controller
         /** @var User $user */
         $user = $this->userRepository->register($request);
         $token = $user->createToken('xlance')->accessToken;
+        if ($request->get('role') == 'employer') {
+            $user->notifs()->create([
+                'text' => 'به ایکس لنس خوش آمدید، برای شروع مهارت های خود را انتخاب کنید',
+                'type' => Notification::SKILLS,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        } else {
+            $user->notifs()->create([
+                'text' => 'به ایکس لنس خوش آمدید، اولین پروژه خود را ثبت کنید',
+                'type' => Notification::REGISTER,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        }
+        Notification::sendNotificationToUsers(collect([$user]));
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        foreach ($admins as $admin) {
+            $admin->notifs()->create([
+                'text' => 'کاربر ' . $user->fullName . 'در سایت ثبت نام کرد',
+                'type' => Notification::REGISTER,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
+        }
         return \response()->json(['token' => $token, 'user' => new UserResource($user)], 201);
     }
 
@@ -96,12 +126,12 @@ class UserController extends Controller
     {
         /** @var User $user */
         $user = $this->userRepository->login($request);
-        if(!$user){
+        if (!$user) {
             return response()->json(['errors' => ['user' => 'کاربر پیدا نشد']], 404);
         } else {
-            if($user->email_verified_at == null) {
+            if ($user->email_verified_at == null) {
                 return response()->json(['errors' => ['email' => ['ایمیل تایید نشده است']]], 422);
-            } else if($this->checkPassword($request->password, $user->password)){
+            } else if ($this->checkPassword($request->password, $user->password)) {
                 $token = $user->createToken('xlance')->accessToken;
                 return response()->json(['token' => $token, 'user' => new UserResource($user)], 200);
             } else {
@@ -123,7 +153,7 @@ class UserController extends Controller
         $token = $user->genResetToken();
         /** @var ResetPassword $passwordReset */
         $passwordReset = ResetPassword::whereEmail($request->email)->first();
-        if($passwordReset) {
+        if ($passwordReset) {
             $passwordReset->update([
                 'token' => $token,
                 'expires_at' => Carbon::now()->addMinutes(60),
@@ -145,7 +175,7 @@ class UserController extends Controller
         $token = $request->get('token');
         /** @var ResetPassword $passwordReset */
         $passwordReset = ResetPassword::whereEmail($request->get('email'))->first();
-        if(!$passwordReset) {
+        if (!$passwordReset) {
             return response()->json([
                 'errors' => [
                     'email' => [
@@ -154,7 +184,7 @@ class UserController extends Controller
                 ],
             ], 404);
         }
-        if($token !== $passwordReset->token) {
+        if ($token !== $passwordReset->token) {
             return response()->json([
                 'errors' => [
                     'token' => [
@@ -163,7 +193,7 @@ class UserController extends Controller
                 ],
             ], 404);
         }
-        if(!Carbon::now()->greaterThan($passwordReset->expires_at)) {
+        if (!Carbon::now()->greaterThan($passwordReset->expires_at)) {
             return response()->json([
                 'errors' => [
                     'token' => [
@@ -180,32 +210,41 @@ class UserController extends Controller
     {
         /** @var User $user */
         $user = User::whereEmail($request->email)->first();
-        if($user) {
+        if ($user) {
             $user->update(['password' => bcrypt($request->password)]);
+            $user->notifs()->create([
+                'text' => 'بازیابی رمز عبور با موفقیت انجام شد.',
+                'type' => Notification::PASSWORD_CHANGED,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$user]));
             return response()->json(['data' => 'پسورد با موفقیت تغییر کرد'], 200);
         } else {
             return response()->json(['data' => 'کاربر یافت نشد'], 404);
         }
     }
 
-    public function changeAuthPassword(UpdatePasswordRequest $request){
+    public function changeAuthPassword(UpdatePasswordRequest $request)
+    {
         /** @var User $auth */
         $auth = auth()->user();
-        if($this->checkPassword($request->password, $auth->password) || $auth->hasRole('admin')) {
+        if ($this->checkPassword($request->password, $auth->password) || $auth->hasRole('admin')) {
             return response()->json(['data' => $this->userRepository->changeAuthPassword($request)]);
         } else {
             return response()->json(['errors' => ['password' => ['رمز عبور فعلی صحیح نیست!']]], 422);
         }
     }
 
-    public function all() {
+    public function all()
+    {
         return new UserCollectionResource($this->userRepository->all());
     }
 
     public function freelancers(): UserCollectionResource
     {
         $freelancers = $this->userRepository->freelancers();
-        if($this->hasPage()) {
+        if ($this->hasPage()) {
             $page = $this->getPage();
             $limit = $this->getLimit();
             return new UserCollectionResource($this->paginateCollection($freelancers, $limit, 'page'));
@@ -243,12 +282,12 @@ class UserController extends Controller
     {
         /** @var User $auth */
         $auth = auth()->user();
-        if($auth->number > $auth->requests_count) {
+        if ($auth->number > $auth->requests_count) {
             return new PackageCollectionResource($auth->selectedPlans);
         } else {
             /** @var SelectedPlan $plan */
             $plan = $auth->selectedPlan()->first();
-            if($plan) {
+            if ($plan) {
                 $selectedPlans = $auth->selectedPlans()
                     ->where('id', '!=', $plan->id)->get();
             } else {
@@ -316,6 +355,23 @@ class UserController extends Controller
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectAvatar($request, $user->profile);
+        if ($request->get('accepted')) {
+            $user->notifs()->create([
+                'text' => 'تصویر پروفایل شما تایید شد.',
+                'type' => Notification::AVATAR_ACCEPTED,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        } else {
+            $user->notifs()->create([
+                'text' => 'تصویر پروفایل شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پروفایل خود را ارسال
+کنید.',
+                'type' => Notification::AVATAR_DENIED,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        }
+        Notification::sendNotificationToUsers(collect([$user]));
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
@@ -324,6 +380,23 @@ class UserController extends Controller
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectBackground($request, $user->profile);
+        if ($request->get('accepted')) {
+            $user->notifs()->create([
+                'text' => 'تصویر پس زمینه شما تایید شد.',
+                'type' => Notification::BG_ACCEPTED,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        } else {
+            $user->notifs()->create([
+                'text' => 'تصویر پس زمینه شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پروفایل خود را ارسال
+کنید.',
+                'type' => Notification::BG_DENIED,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        }
+        Notification::sendNotificationToUsers(collect([$user]));
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
@@ -332,6 +405,23 @@ class UserController extends Controller
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectNationalCard($request, $user->profile);
+        if ($request->get('accepted')) {
+            $user->notifs()->create([
+                'text' => 'تصویر کارت ملی شما تایید شد.',
+                'type' => Notification::NATIONAL_ACCEPTED,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        } else {
+            $user->notifs()->create([
+                'text' => 'تصویر کارت ملی شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پروفایل خود را ارسال
+کنید.',
+                'type' => Notification::NATIONAL_DENIED,
+                'user_id' => $user->id,
+                'image_id' => null
+            ]);
+        }
+        Notification::sendNotificationToUsers(collect([$user]));
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
@@ -340,6 +430,24 @@ class UserController extends Controller
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectSheba($request, $user->profile);
+        if ($request->accepted) {
+            $user->notifs()->create([
+                'text' => 'شماره ی شبا شما تایید شد',
+                'type' => Notification::SHEBA_ACCEPTED,
+                'user_id' => $user->id,
+                'notifiable_id' => $user->id,
+                'image_id' => null
+            ]);
+        } else {
+            $user->notifs()->create([
+                'text' => 'شماره شبا شما رد شد. لطفا این راهنما را مطالعه و سپس شماره شبای خود را وارد کنید.',
+                'type' => Notification::SHEBA_DENIED,
+                'user_id' => $user->id,
+                'notifiable_id' => $user->id,
+                'image_id' => null
+            ]);
+        }
+        Notification::sendNotificationToUsers(collect([$user]));
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
@@ -441,9 +549,16 @@ class UserController extends Controller
         /** @var User $auth */
         $auth = auth()->user();
         $user = $this->userRepository->findOneOrFail($request->get('user_id'));
-        if($auth->can('follow-user', $user)) {
-            if(!$user->isFollowedBy($auth)) {
+        if ($auth->can('follow-user', $user)) {
+            if (!$user->isFollowedBy($auth)) {
                 $auth->follow($user);
+                $user->notifs()->create([
+                    'text' => $auth->first_name . ' ' . $auth->last_name . ' شما را دنبال می کند.',
+                    'type' => Notification::FOLLOW,
+                    'user_id' => $user->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$user]));
             }
             return response()->json(['success' => 'با موفقیت انجام شد!'], 200);
         } else {
@@ -456,8 +571,8 @@ class UserController extends Controller
         /** @var User $auth */
         $auth = auth()->user();
         $user = $this->userRepository->findOneOrFail($request->get('user_id'));
-        if($auth->can('unFollow-user', $user)) {
-            if($user->isFollowedBy($auth)) {
+        if ($auth->can('unFollow-user', $user)) {
+            if ($user->isFollowedBy($auth)) {
                 $auth->unfollow($user);
             }
             return response()->json(['success' => 'با موفقیت انجام شد!'], 200);
@@ -539,7 +654,7 @@ class UserController extends Controller
         });
         $finished = $own->filter(function (Request $request) {
             return $request->project->status == Project::FINISHED_STATUS ||
-                $request->project->status == Project::CANCELED_STATUS ;
+                $request->project->status == Project::CANCELED_STATUS;
         });
         return [
             'finished' => new RequestCollectionResource($finished),
@@ -555,26 +670,28 @@ class UserController extends Controller
         $auth = auth()->user();
         /** @var Project $project */
         $project = Project::findOrFail($sendRequestForProjectRequest->project_id);
-        $count = Request::where('user_id', '=', $auth->id)
-            ->where('status', '!=', Request::REJECTED_STATUS)
-            ->where('project_id', '=', $project->id)
-            ->count();
-        if($count != 0) {
+        $count = Request::query()->where(function ($q) use ($auth, $project) {
+            $q->where('user_id', '=', $auth->id);
+            $q->whereNotIn('status', [Request::REJECTED_STATUS, Request::IN_PAY_STATUS]);
+            $q->where('project_id', '=', $project->id);
+
+        })->count();
+        if ($count != 0) {
             return response()->json(['errors' => ['project' => ['شما قبلا برای این پروژه درخواست ثبت کرده اید!']]], 422);
         }
-        if($auth->getNumber() == $auth->requestsCount()) {
+        if ($auth->getNumber() == $auth->requestsCount()) {
             return response()->json(['errors' => ['project' => ['تعداد درخواست های شما تمام شده است. برای ارسال درخواست پلن جدید تهیه کنید!']]], 422);
         }
-        if($auth->id == $project->employer->id) {
+        if ($auth->id == $project->employer->id) {
             return response()->json(['errors' => ['project' => ['شما کارفرمای این پروژه هستید پس نمی توانید برای این پروژه درخواست ثبت کنید!']]], 422);
         }
-        if($project->freelancer_id != null) {
+        if ($project->freelancer_id != null) {
             return response()->json(['errors' => ['project' => ['پروژه درحال انجا می باشد!']]], 422);
         }
-        if(!$auth->isValidated()) {
+        if (!$auth->isValidated()) {
             return response()->json(['errors' => ['project' => ['مدارک شما تکمیل و یا تایید نشده است!']]], 422);
         }
-        if($auth->hasRole('admin')) {
+        if ($auth->hasRole('admin')) {
             return response()->json(['errors' => ['project' => ['کاربر ادمین نمی تواند درخواست ثبت کند!']]], 422);
         }
         /** @var Wallet $wallet */
@@ -582,29 +699,39 @@ class UserController extends Controller
         /** @var Setting $settings */
         $settings = Setting::all()->first();
         $amount = 0;
-        if($sendRequestForProjectRequest->is_distinguished) {
-            $amount = $amount + (int) $settings->distinguished_price;
+        if ($sendRequestForProjectRequest->is_distinguished) {
+            $amount = $amount + (int)$settings->distinguished_price;
         }
-        if($sendRequestForProjectRequest->is_sponsored) {
-            $amount = $amount + (int) $settings->sponsored_price;
+        if ($sendRequestForProjectRequest->is_sponsored) {
+            $amount = $amount + (int)$settings->sponsored_price;
         }
-        $balance =(int) $wallet->balance;
-        if($balance < $amount) {
-            return response()->json(['errors' => ['amount' =>['موجودی کیف پول شما کم است']]], 422);
+        $balance = (int)$wallet->balance;
+        if ($balance < $amount) {
+//            return response()->json(['errors' => ['amount' =>['موجودی کیف پول شما کم است']]], 422);
 
-//            return $this->createTransactionForSendRequest($auth, $amount - $balance, $project, $sendRequestForProjectRequest);
+            return $this->createTransactionForSendRequest($auth, $amount - $balance, $project, $sendRequestForProjectRequest);
         }
         $spPrices = $this->getSecurePayments($sendRequestForProjectRequest);
-        if((int) $sendRequestForProjectRequest->price != $spPrices) {
-            return response()->json(['errors' => ['amount' =>['مبلغ اعلام شده با مجموع مبلغ پرداخت های امن متفاوت است!']]], 422);
+        if ((int)$sendRequestForProjectRequest->price != $spPrices) {
+            return response()->json(['errors' => ['amount' => ['مبلغ اعلام شده با مجموع مبلغ پرداخت های امن متفاوت است!']]], 422);
         }
         $request = $this->userRepository->sendRequest($sendRequestForProjectRequest);
+        $user = $project->employer()->get();
+        $project->notifications()->create([
+            'text' => $auth->first_name . ' ' . $auth->last_name . ' به پروژه ی شما پیشنهاد داد',
+            'type' => Notification::PROJECT,
+            'user_id' => $user->id,
+            'notifiable_id' => $project->id,
+            'image_id' => null
+        ]);
+        Notification::sendNotificationToUsers(collect([$user]));
         return new RequestResource($request);
     }
 
-    private function createTransactionForSendRequest(User $user, int $amount, Project $project, SendRequestForProjectRequest $requestForProjectRequest) {
+    private function createTransactionForSendRequest(User $user, int $amount, Project $project, SendRequestForProjectRequest $requestForProjectRequest)
+    {
         $invoice = new Invoice;
-        $amount = (int) ($amount / 10);
+        $amount = (int)($amount / 10);
         $invoice->amount($amount);
         $invoice->detail('t_id', $invoice->getTransactionId());
         /** @var Request $request */
@@ -620,7 +747,7 @@ class UserController extends Controller
             'project_id' => $project->id,
             'to_id' => $project->employer->id,
         ]);
-        if($requestForProjectRequest->has('new_secure_payments')) {
+        if ($requestForProjectRequest->has('new_secure_payments')) {
             $securePayments = $requestForProjectRequest->get('new_secure_payments');
             foreach ($securePayments as $payment) {
                 TempSecurePayment::create([
@@ -635,11 +762,12 @@ class UserController extends Controller
                 ]);
             }
         }
-        return Payment::purchase($invoice, function($driver, $transactionId) use($user, $invoice, $project, $amount){
+        return Payment::purchase($invoice, function ($driver, $transactionId) use ($user, $invoice, $project, $amount, $request) {
             Transaction::create([
-                'user_id' =>  $user->id,
+                'user_id' => $user->id,
                 'transaction_id' => $transactionId,
                 'project_id' => $project->id,
+                'request_id' => $request->id,
                 'type' => Transaction::REQUEST_TYPE,
                 'status' => Transaction::CREATED_STATUS,
                 'amount' => $invoice->getAmount(),
@@ -648,13 +776,14 @@ class UserController extends Controller
         })->pay()->toJson();
     }
 
-    public function getSecurePayments(SendRequestForProjectRequest $request){
+    public function getSecurePayments(SendRequestForProjectRequest $request)
+    {
         $securePayments = $request->get('new_secure_payments');
-        if(!is_null($securePayments)) {
-            if(is_array($securePayments)) {
+        if (!is_null($securePayments)) {
+            if (is_array($securePayments)) {
                 $price = 0;
                 foreach ($securePayments as $s) {
-                    $price += (int) $s['price'];
+                    $price += (int)$s['price'];
                 }
                 return $price;
             } else {
@@ -696,16 +825,25 @@ class UserController extends Controller
         /** @var User $auth */
         $auth = auth()->user();
         $project = $request->project;
-        if($project->acceptFreelancerRequest()->count() != 0) {
+        if ($project->acceptFreelancerRequest()->count() != 0) {
             return response()->json(['errors' => ['freelancer' => ['شما قبلا درخواست یک فریلنسر را پذیرفته اید']]], 422);
         }
-        if($project->selected_request_id != null) {
+        if ($project->selected_request_id != null) {
             return response()->json(['errors' => ['project' => ['پروژه در حال انجام است']]], 422);
         }
-        if($auth->id != $project->employer->id) {
+        if ($auth->id != $project->employer->id) {
             return response()->json(['errors' => ['employer' => ['شما کارفرمای پروژه نیستید']]], 422);
         }
         $request = $this->userRepository->authAcceptOrRejectProjectRequest($projectRequest, $project, $request);
+        $user = $project->employer()->get();
+        $project->notifications()->create([
+            'text' => 'پیشنهاد انجام پروژه به ' . $auth->first_name . ' ' . $auth->last_name . 'ارسال شد',
+            'type' => Notification::PROJECT,
+            'user_id' => $user->id,
+            'notifiable_id' => $project->id,
+            'image_id' => null
+        ]);
+        Notification::sendNotificationToUsers(collect([$user]));
         return new RequestResource($request);
     }
 
@@ -713,7 +851,7 @@ class UserController extends Controller
     {
         /** @var User $auth */
         $auth = auth()->user();
-        if($auth->can('freelancer-get-accept-reject-request', $accept)) {
+        if ($auth->can('freelancer-get-accept-reject-request', $accept)) {
             return new AcceptFreelancerResource($accept);
         } else {
             return $this->accessDeniedResponse();
@@ -729,16 +867,59 @@ class UserController extends Controller
         $count = $project->acceptFreelancerRequest()
             ->where('freelancer_id', '=', $auth->id)
             ->where('status', '=', AcceptFreelancerRequest::CREATED_STATUS)->count();
-        if($auth->id != $request->freelancer->id) {
+        if ($auth->id != $request->freelancer->id) {
             return response()->json(['errors' => ['freelancer' => ['شما نمی توانید این درخواست را تایید کنید!']]], 422);
-        } else if($project->selected_request_id != null) {
+        } else if ($project->selected_request_id != null) {
             return response()->json(['errors' => ['project' => ['برای این پروژه درخواست دیگری تایید شده است!']]], 422);
-        } else if($count != 1){
+        } else if ($count != 1) {
             return response()->json(['errors' => ['count' => ['شما در خواست تایید شده برای این پروژه ندارید!']]], 422);
         } else {
             $request = $this->userRepository->freelancerAcceptOrRejectRequest($projectRequest, $project, $request);
-            return new AcceptFreelancerResource($request);
+            $user = $project->employer()->get();
+            if ($projectRequest->accepted) {
+                $project->notifications()->create([
+                    'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' پذیرفته شد',
+                    'type' => Notification::PROJECT,
+                    'user_id' => $user->id,
+                    'notifiable_id' => $project->id,
+                    'image_id' => null
+                ]);
+                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                    $q->where('name', '=', 'admin');
+                })->get();
+                foreach ($admins as $admin) {
+                    $project->notifications()->create([
+                        'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' پذیرفته شد',
+                        'type' => Notification::ADMIN_PROJECT,
+                        'user_id' => $admin->id,
+                        'image_id' => null
+                    ]);
+                    Notification::sendNotificationToUsers(collect([$admin]));
+                }
+            } else {
+                $project->notifications()->create([
+                    'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' رد شد',
+                    'type' => Notification::PROJECT,
+                    'user_id' => $user->id,
+                    'notifiable_id' => $project->id,
+                    'image_id' => null
+                ]);
+            }
         }
+        Notification::sendNotificationToUsers(collect([$user]));
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        foreach ($admins as $admin) {
+            $project->notifications()->create([
+                'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' رد شد',
+                'type' => Notification::ADMIN_PROJECT,
+                'user_id' => $admin->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
+        }
+        return new AcceptFreelancerResource($request);
     }
 
     public function deposit(DepositRequest $request)
@@ -750,18 +931,38 @@ class UserController extends Controller
     {
         /** @var User $user */
         $user = auth()->user();
-        if($user->profile->sheba == null) {
+        if ($user->profile->sheba == null) {
             return response()->json(['errors' => ['sheba' => ['ابتدا شماره شبا را تکمیل کنید!']]], 422);
         }
-        if(!$user->profile->sheba_accepted) {
+        if (!$user->profile->sheba_accepted) {
             return response()->json(['errors' => ['sheba' => ['شماره شبا تایید نشده است!']]], 422);
         }
         /** @var Wallet $wallet */
         $wallet = $user->wallet;
-        if($wallet->balance < (int) $request->amount) {
+        if ($wallet->balance < (int)$request->amount) {
             return response()->json(['errors' => ['sheba' => ['موجودی کیف پول شما کمتر از مبلغ مورد نیاز می باشد!']]], 422);
         }
-        if($this->userRepository->withdraw($request->amount)) {
+        if ($this->userRepository->withdraw($request->amount)) {
+            $user->notifs()->create([
+                'text' => 'درخواست برداشت به مبلغ ' . $request->amount . ' برای ادمین ارسال شد.',
+                'type' => Notification::WITHDRAW,
+                'user_id' => $user->id,
+                'notifiable_id' => $user->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$user]));
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            foreach ($admins as $admin) {
+                $user->notifs()->create([
+                    'text' => "$user->first_name $user->last_name درخواست برداشت مبلغ $$request->amount را دارد. ",
+                    'type' => Notification::WITHDRAW,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
             return response()->json(['success' => true, 'message' => 'درخواست برداشت با موفقیت ثبت شد'], 200);
         } else {
             return response()->json(['success' => false, 'message' => 'متاسفانه خطایی رخ داده است.'], 500);
@@ -848,7 +1049,7 @@ class UserController extends Controller
         /** @var User $auth */
         $auth = auth()->user();
         $user = $this->userRepository->findOneOrFail($id);
-        if($auth->can('block-user', $user)) {
+        if ($auth->can('block-user', $user)) {
             $status = $this->userRepository->blockAndUnblockUser($id);
             return response()->json(['blocked' => $status]);
         } else {
@@ -861,10 +1062,10 @@ class UserController extends Controller
         /** @var Collection $disputes */
         $disputes = $this->userRepository->disputes();
         return [
-            'open' => new DisputeCollectionResource($disputes->filter(function($i) {
+            'open' => new DisputeCollectionResource($disputes->filter(function ($i) {
                 return $i->status !== Dispute::CLOSED_STATUS;
             })->sortByDesc('id')),
-            'close' => new DisputeCollectionResource($disputes->filter(function($i) {
+            'close' => new DisputeCollectionResource($disputes->filter(function ($i) {
                 return $i->status === Dispute::CLOSED_STATUS;
             })->sortByDesc('id'))
         ];
@@ -875,7 +1076,8 @@ class UserController extends Controller
         if (\request()->get('page')) {
             $page = $this->getPage();
             $limit = $this->getLimit();
-            $notifications = $this->paginateCollection($this->userRepository->authNotifications(), $limit, 'page');
+//            $notifications = $this->paginateCollection($this->userRepository->authNotifications($limit), $limit, 'page');
+            $notifications = $this->userRepository->authNotificationsPaginate($limit);
         } else {
             $notifications = $this->userRepository->authNotifications();
         }
@@ -904,16 +1106,16 @@ class UserController extends Controller
         /** @var RequestPackage $package */
         $package = RequestPackage::findOrFail($request->get('package_id'));
         $monthly = $request->get('monthly');
-        $monthlyPrice = (int) $package->price;
-        $yearlyPrice = (int)(12 * $monthlyPrice) * 80 / 100 ;
-        if(($monthly && $package->price > $balance ) || (!$monthly && $yearlyPrice > $balance)) {
+        $monthlyPrice = (int)$package->price;
+        $yearlyPrice = (int)(12 * $monthlyPrice) * 80 / 100;
+        if (($monthly && $package->price > $balance) || (!$monthly && $yearlyPrice > $balance)) {
             $amount = $monthly ? $monthlyPrice - $balance : $yearlyPrice - $balance;
             $invoice = new Invoice;
-            $invoice->amount((int) ($amount / 10));
+            $invoice->amount((int)($amount / 10));
             $invoice->detail('t_id', $invoice->getTransactionId());
-            return Payment::purchase($invoice, function($driver, $transactionId) use($user, $invoice, $monthly, $package){
+            return Payment::purchase($invoice, function ($driver, $transactionId) use ($user, $invoice, $monthly, $package) {
                 Transaction::create([
-                    'user_id' =>  $user->id,
+                    'user_id' => $user->id,
                     'transaction_id' => $transactionId,
                     'project_id' => null,
                     'request_package_id' => $package->id,
@@ -926,10 +1128,10 @@ class UserController extends Controller
         } else {
             $lastPlan = SelectedPlan::all()->where('user_id', '=', $user->id)
                 ->last();
-            if($lastPlan) {
-                $start_date = Carbon::createFromFormat('Y-m-d H:i:s',$lastPlan->end_date)->addSecond();
-                $end_date = $monthly ? Carbon::createFromFormat('Y-m-d H:i:s',$lastPlan->end_date)->addSecond()->addMonth() :
-                    Carbon::createFromFormat('Y-m-d H:i:s',$lastPlan->end_date)->addSecond()->addYear();
+            if ($lastPlan) {
+                $start_date = Carbon::createFromFormat('Y-m-d H:i:s', $lastPlan->end_date)->addSecond();
+                $end_date = $monthly ? Carbon::createFromFormat('Y-m-d H:i:s', $lastPlan->end_date)->addSecond()->addMonth() :
+                    Carbon::createFromFormat('Y-m-d H:i:s', $lastPlan->end_date)->addSecond()->addYear();
             } else {
                 $start_date = Carbon::now();
                 $end_date = $monthly ? Carbon::now()->addMonth() : Carbon::now()->addYear();
@@ -946,6 +1148,26 @@ class UserController extends Controller
             /** @var Wallet $wallet */
             $wallet = $user->wallet;
             $wallet->forceWithdraw($monthly ? $monthlyPrice : $yearlyPrice);
+            $user->notifs()->create([
+                'text' => 'ارتقای عضویت شما به پکیج ' . $package->title . ' با موفقیت انجام شد.',
+                'type' => Notification::PACKAGE,
+                'user_id' => $user->id,
+                'notifiable_id' => $user->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$user]));
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            foreach ($admins as $admin) {
+                $user->notifs()->create([
+                    'text' => "$user->first_name $user->last_name پکیج خود را ارتقا داد.",
+                    'type' => Notification::PACKAGE,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
             return response()->json(['data' => 'ارتقای عضویت انجام شد'], 200);
         }
     }
@@ -959,19 +1181,19 @@ class UserController extends Controller
         $users = User::all()->filter(function (User $u) {
             return $u->hasRole('freelancer');
         });
-       if($term) {
-           $users = $users->filter(function (User $user) use($term){
-               return $this->isLike($user->username, $term) || $user->first_name && $this->isLike($user->first_name, $term) || $user->last_name && $this->isLike($user->last_name, $term);
-           });
-       }
-        if($skills && count($skills) > 0) {
-            $users = $users->filter(function (User $user) use($skills) {
+        if ($term) {
+            $users = $users->filter(function (User $user) use ($term) {
+                return $this->isLike($user->username, $term) || $user->first_name && $this->isLike($user->first_name, $term) || $user->last_name && $this->isLike($user->last_name, $term);
+            });
+        }
+        if ($skills && count($skills) > 0) {
+            $users = $users->filter(function (User $user) use ($skills) {
                 $ids = $user->skills->pluck('id')->toArray();
                 return count(array_intersect($ids, $skills)) > 0;
             });
         }
         $users = $users->sort(function (User $first, User $second) {
-            if($first->calcRates() == $second->calcRates()) {
+            if ($first->calcRates() == $second->calcRates()) {
                 return 0;
             }
             return $first->calcRates() > $second->calcRates() ? -1 : 1;
@@ -993,7 +1215,7 @@ class UserController extends Controller
         $auth = auth()->user();
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($request->get('to_id'));
-        if(!$request->get('conversation_id') && $auth->can('create-direct-conversation', $request->get('to_id'))){
+        if (!$request->get('conversation_id') && $auth->can('create-direct-conversation', $request->get('to_id'))) {
             /** @var Conversation $conversation */
             $conversation = $auth->conversations()->create([
                 'user_id' => $auth->id,
@@ -1007,7 +1229,7 @@ class UserController extends Controller
             /** @var Conversation $conversation */
             $conversation = Conversation::findOrFail($request->get('conversation_id'));
         }
-        if($conversation != null && $conversation->isDisabled()) {
+        if ($conversation != null && $conversation->isDisabled()) {
             return response()->json(['errors' => ['message' => ['تا زمان ارسال پیام توسط کارفرما این چت برای شما بسته است!']]], 422);
         }
         /** @var Message $message */
@@ -1018,9 +1240,9 @@ class UserController extends Controller
             'body' => $request->get('body'),
         ]);
         $conversation->save();
-        if($request->get('type') == Message::FILE_TYPE && $request->has('upload_id')) {
+        if ($request->get('type') == Message::FILE_TYPE && $request->has('upload_id')) {
             $upload = Upload::find($request->get('upload_id'));
-            if($upload) {
+            if ($upload) {
                 $message->update([
                     'upload_id' => $upload->id
                 ]);
@@ -1048,34 +1270,34 @@ class UserController extends Controller
         $users = $users->filter(function (User $user) {
             return $user->hasRole('freelancer') || $user->hasRole('employer');
         });
-        if($role && $role !== 'both') {
-            $users = $users->filter(function (User $user) use($role) {
+        if ($role && $role !== 'both') {
+            $users = $users->filter(function (User $user) use ($role) {
                 return $user->hasRole($role);
             });
         } else {
-            if($role === 'both') {
-                $users = $users->filter(function (User $user) use($role) {
+            if ($role === 'both') {
+                $users = $users->filter(function (User $user) use ($role) {
                     return $user->hasRole('freelancer') || $user->hasRole('employer');
                 });
             }
         }
-        if($email) {
-            $users = $users->filter(function (User $user) use($email){
+        if ($email) {
+            $users = $users->filter(function (User $user) use ($email) {
                 return $this->isLike($user->email, $email);
             });
         }
-        if($username) {
-            $users = $users->filter(function (User $user) use($username){
+        if ($username) {
+            $users = $users->filter(function (User $user) use ($username) {
                 return $this->isLike($user->username, $username);
             });
         }
-        if($phone_number) {
-            $users = $users->filter(function (User $user) use($phone_number){
+        if ($phone_number) {
+            $users = $users->filter(function (User $user) use ($phone_number) {
                 return $user->phone_numebr && $this->isLike($user->phone_number, $phone_number);
             });
         }
-        if($skills && count($skills) > 0) {
-            $users = $users->filter(function (User $user) use($skills) {
+        if ($skills && count($skills) > 0) {
+            $users = $users->filter(function (User $user) use ($skills) {
                 $ids = $user->skills->pluck('id')->toArray();
                 return count(array_intersect($ids, $skills)) > 0;
             });
@@ -1103,10 +1325,10 @@ class UserController extends Controller
     {
         /** @var User $user */
         $user = User::find($id);
-        if($user) {
-            $trueHash = ! hash_equals((string) $hash, sha1($user->getEmailForVerification()));
-            if($trueHash) {
-                if (! $user->hasVerifiedEmail()) {
+        if ($user) {
+            $trueHash = !hash_equals((string)$hash, sha1($user->getEmailForVerification()));
+            if ($trueHash) {
+                if (!$user->hasVerifiedEmail()) {
                     $user->markEmailAsVerified();
                     event(new Verified($user));
                     return response()->json(['data' => 'ایمیل تایید شد'], 200);

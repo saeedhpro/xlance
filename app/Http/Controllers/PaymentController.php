@@ -3,12 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Events\NewConversationEvent;
+use App\Events\NewMessageEvent;
+use App\Events\NewMessageNotificationEvent;
 use App\Models\Conversation;
+use App\Models\Message;
+use App\Models\Notification;
 use App\Models\PaymentHistory;
 use App\Models\Project;
+use App\Models\Request as ProjectRequest;
 use App\Models\RequestPackage;
 use App\Models\SecurePayment;
 use App\Models\SelectedPlan;
+use App\Models\TempSecurePayment;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\Carbon;
@@ -40,6 +46,18 @@ class PaymentController extends Controller
                     'status' => PaymentHistory::DEPOSITED_STATUS,
                 ]);
                 $history->save();
+                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                    $q->where('name', '=', 'admin');
+                })->get();
+                foreach ($admins as $admin) {
+                    $user->notifs()->create([
+                        'text' => "افزایش اعتبار $user->first_name $user->last_name به مبلغ $t->amount با موفقیت انجام شده است ",
+                        'type' => Notification::ADMIN_RECORDS,
+                        'user_id' => $admin->id,
+                        'image_id' => null
+                    ]);
+                    Notification::sendNotificationToUsers(collect([$admin]));
+                }
                 $status = 200;
                 $message = 'پرداخت با موفقیت انجام شد برای ادامه روی دکمه ی بازگشت کلیک کنید';
                 $url = 'https://xlance.ir/records?referenceId='.$referenceId;
@@ -66,6 +84,30 @@ class PaymentController extends Controller
                         'status' => Conversation::OPEN_STATUS,
                     ]);
                     broadcast(new NewConversationEvent($user, $conversation));
+                }
+                $project->notifications()->create([
+                    'text' => 'پروژه '. $project->title .' ایجاد شد.',
+                    'type' => Notification::PROJECT,
+                    'user_id' => $user->id,
+                    'notifiable_id' => $project->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$user]));
+                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                    $q->where('name', '=', 'admin');
+                })->get();
+                $employer = $project->employer;
+                $freelancer = $project->freelancer;
+                foreach ($admins as $admin) {
+                    $user->notifs()->create([
+                        'text' =>
+                        $freelancer ? "$employer->first_name $employer->last_name پروژه ی $project->title را برای $freelancer->first_name $freelancer->last_name ایجاد کرد."
+                        : "$employer->first_name $employer->last_name پروژه ی $project->title را ایجاد کرد.",
+                        'type' => Notification::ADMIN_PROJECT,
+                        'user_id' => $admin->id,
+                        'image_id' => null
+                    ]);
+                    Notification::sendNotificationToUsers(collect([$admin]));
                 }
                 $status = 200;
                 $message = 'پرداخت با موفقیت انجام شد برای ادامه روی دکمه ی بازگشت کلیک کنید';
@@ -108,6 +150,26 @@ class PaymentController extends Controller
                 $t->update([
                     'status' => Transaction::PAYED_STATUS
                 ]);
+                $user->notifs()->create([
+                    'text' => 'ارتقای عضویت شما به پکیج '. $package->title .' با موفقیت انجام شد.',
+                    'type' => Notification::PACKAGE,
+                    'user_id' => $user->id,
+                    'notifiable_id' => $user->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$user]));
+                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                    $q->where('name', '=', 'admin');
+                })->get();
+                foreach ($admins as $admin) {
+                    $user->notifs()->create([
+                        'text' => 'ارتقای عضویت شما به پکیج '. $package->title .' با موفقیت انجام شد.',
+                        'type' => Notification::ADMIN_PACKAGE,
+                        'user_id' => $admin->id,
+                        'image_id' => null
+                    ]);
+                    Notification::sendNotificationToUsers(collect([$admin]));
+                }
                 $message = 'پرداخت با موفقیت انجام شد برای ادامه روی دکمه ی بازگشت کلیک کنید';
                 $url = 'https://xlance.ir/membership-upgrade/?referenceId='.$referenceId.'&id='.$package->id;
                 return view('payment', compact('referenceId', 'status', 'message', 'url'));
@@ -117,17 +179,40 @@ class PaymentController extends Controller
                 $securePayment->update([
                    'status' => SecurePayment::PAYED_STATUS
                 ]);
+                /** @var Project $project */
                 $project = $t->project;
                 $status = 200;
                 $t->update([
                     'status' => Transaction::PAYED_STATUS
                 ]);
+                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                    $q->where('name', '=', 'admin');
+                })->get();
+                $freelancer = $project->freelancer;
+                foreach ($admins as $admin) {
+                    $project->notifications()->create([
+                        'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $t->amount . 'ایجاد کرده است',
+                        'type' => Notification::ADMIN_PROJECT,
+                        'user_id' => $admin->id,
+                        'image_id' => null
+                    ]);
+                    Notification::sendNotificationToUsers(collect([$admin]));
+                }
                 $message = 'پرداخت با موفقیت انجام شد برای ادامه روی دکمه ی بازگشت کلیک کنید';
                 $url = 'https://xlance.ir/projects/'. $project->id .'?referenceId='.$referenceId.'&id='.$securePayment->id;
                 return view('payment', compact('referenceId', 'status', 'message', 'url'));
             } else if($t->type == Transaction::REQUEST_TYPE) {
                 /** @var Project $project */
                 $project = $t->project;
+                /** @var ProjectRequest $req */
+                $req = $t->request;
+                $user = $req->user;
+                $req->update([
+                    'status' => ProjectRequest::CREATED_STATUS,
+                ]);
+                $req->save();
+
+                $this->createSecurePayments($req, $user, $project);
 
                 $status = 200;
                 $t->update([
@@ -154,6 +239,74 @@ class PaymentController extends Controller
             $url = 'https://xlance.ir/';
             $referenceId = '';
             return view('payment', compact('referenceId', 'status', 'message', 'url'));
+        }
+    }
+
+    private function createSecurePayments(ProjectRequest $req, User $user, Project $project)
+    {
+        /** @var Conversation $conversation */
+        $conversation = $user->conversations()->create([
+            'user_id' => $user->id,
+            'to_id' => $project->employer->id,
+            'project_id' => $project->id,
+            'status' => Conversation::OPEN_STATUS,
+        ]);
+        /** @var User $admin */
+        $admin = User::all()->filter(function(User $user) {
+            return $user->hasRole('admin');
+        })->first();
+        $body = 'توضیحات فریلنسر: پیشنهاد "'.$req->price.'" تومان در "'. $req->delivery_date .'" روز ';
+        $message = Message::create([
+            'user_id' => $admin->id,
+            'type' => Message::TEXT_TYPE,
+            'conversation_id' => $conversation->id,
+            'body' => $body,
+            'is_system' => true
+        ]);
+        $conversation->new_messages_count = $conversation->new_messages_count + 1;
+        $conversation->save();
+        broadcast(new NewConversationEvent($user, $conversation));
+        broadcast(new NewConversationEvent($project->employer, $conversation));
+        $employer = $project->employer;
+        $nonce = $this->getNonce();
+        broadcast(new NewMessageNotificationEvent($employer, $employer->newMessagesCount(), $nonce));
+        $nonce = $this->getNonce();
+        broadcast(new NewMessageNotificationEvent($user, $user->newMessagesCount(), $nonce));
+        $nonce = $this->getNonce();
+        broadcast(new NewMessageNotificationEvent($admin, $admin->newMessagesCount(), $nonce));
+        broadcast(new NewMessageEvent($message, $user));
+        broadcast(new NewMessageEvent($message, $project->employer));
+        broadcast(new NewMessageEvent($message, $admin));
+        $secs = $req->tempSecurePayments()->get();
+        foreach ($secs as $sec) {
+            SecurePayment::create([
+                'title' => $sec->title,
+                'price' => $sec->price,
+                'status' => SecurePayment::CREATED_STATUS,
+                'user_id' => $sec->user_id,
+                'to_id' => $sec->to_id,
+                'request_id' => $req->id,
+                'project_id' => $sec->project_id,
+                'is_first' => true,
+            ]);
+            $body = 'پرداخت امن "' . $sec->title . '" : "' . $sec->price . '" ریال "';
+            $message = Message::create([
+                'user_id' => $admin->id,
+                'type' => Message::TEXT_TYPE,
+                'conversation_id' => $conversation->id,
+                'body' => $body,
+                'is_system' => true
+            ]);
+            $employer = $project->employer;
+            $nonce = $this->getNonce();
+            broadcast(new NewMessageNotificationEvent($user, $user->newMessagesCount(), $nonce));
+            $nonce = $this->getNonce();
+            broadcast(new NewMessageNotificationEvent($admin, $admin->newMessagesCount(), $nonce));
+            $nonce = $this->getNonce();
+            broadcast(new NewMessageNotificationEvent($employer, $employer->newMessagesCount(), $nonce));
+            broadcast(new NewMessageEvent($message, $user));
+            broadcast(new NewMessageEvent($message, $employer));
+            broadcast(new NewMessageEvent($message, $admin));
         }
     }
 }

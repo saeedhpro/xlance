@@ -180,6 +180,27 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
             broadcast(new NewMessageNotificationEvent($freelancer, $freelancer->newMessagesCount(), $nonce));
             broadcast(new NewMessageEvent($message, $project->employer));
             broadcast(new NewMessageEvent($message, $project->freelancer));
+            $project->notifications()->create([
+                'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $p['price'] . 'ایجاد کرده است',
+                'type' => Notification::PROJECT,
+                'user_id' => $employer->id,
+                'notifiable_id' => $project->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$employer]));
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            $freelancer = $project->freelancer;
+            foreach ($admins as $admin) {
+                $freelancer->notifs()->create([
+                    'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $p['price'] . 'ایجاد کرده است',
+                    'type' => Notification::ADMIN_RECORDS,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
         }
         return $req;
     }
@@ -235,6 +256,7 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
         $user = $request->user;
         /** @var Project $project */
         $project = $request->project;
+        $employer = $project->employer;
         if($accepted) {
             $payment->update([
                 'status' => SecurePayment::ACCEPTED_STATUS
@@ -244,28 +266,50 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
                     'price' => $request->price + $payment->price
                 ]);
             }
-            $notificationBody = 'پرداخت امن به مبلغ '. $payment->price .' تومان تایید شد';
-            $project->notifications()->create(array(
-                'text' => $notificationBody,
+            $project->notifications()->create([
+                'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را پذیرفت',
                 'type' => Notification::PROJECT,
                 'user_id' => $user->id,
-                'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
-            ));
-            Notification::sendNotificationToAll([$user->email], $notificationBody, $notificationBody, null);
-            Notification::sendNotificationToUsers(collect([$user]));
+                'notifiable_id' => $project->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$employer]));
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            foreach ($admins as $admin) {
+                $project->notifications()->create([
+                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را پذیرفت',
+                    'type' => Notification::ADMIN_PROJECT,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
         } else {
             $payment->update([
                 'status' => SecurePayment::REJECTED_STATUS
             ]);
-            $notificationBody = 'پرداخت امن به مبلغ '. $payment->price .' تومان رد شد';
-            $project->notifications()->create(array(
-                'text' => $notificationBody,
+            $project->notifications()->create([
+                'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را رد کرد.',
                 'type' => Notification::PROJECT,
                 'user_id' => $user->id,
-                'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
-            ));
-            Notification::sendNotificationToAll([$user->email], $notificationBody, $notificationBody, null);
+                'notifiable_id' => $project->id,
+                'image_id' => null
+            ]);
             Notification::sendNotificationToUsers(collect([$user]));
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            foreach ($admins as $admin) {
+                $project->notifications()->create([
+                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را رد کرد.',
+                    'type' => Notification::ADMIN_PROJECT,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
         }
         return $accepted;
     }
@@ -300,6 +344,20 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
             $request->update([
                 'price' => $request->price - $payment->price
             ]);
+            $project = $request->project;
+            $employer = $project->employer;
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            foreach ($admins as $admin) {
+                $project->notifications()->create([
+                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را آزاد کرد',
+                    'type' => Notification::ADMIN_PROJECT,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
             return true;
         } catch (\Exception $exception) {
             return false;
@@ -396,6 +454,27 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
                 'rater_id' => $emp->id,
                 'project_id' => $project->id,
             ]);
+            $emp->notifs()->create([
+                'text' => 'نظر شما برای ' . $user->first_name . '' . $user->last_name . 'با موفقیت ثبت شد و در پروفایل ایشان نمایش داده خواهد شد.',
+                'type' => Notification::RATE_FREELANCER,
+                'user_id' => $emp->id,
+                'notifiable_id' => $emp->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$user]));
+
+            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+                $q->where('name', '=', 'admin');
+            })->get();
+            foreach ($admins as $admin) {
+                $project->notifications()->create([
+                    'text' => $emp->first_name . '' . $emp->last_name . 'برای اتمام پروژه ' . $project->title . ' نظر ثبت کرده است.',
+                    'type' => Notification::ADMIN_PROJECT,
+                    'user_id' => $admin->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$admin]));
+            }
             return true;
         }
         return false;

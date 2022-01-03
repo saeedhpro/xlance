@@ -70,6 +70,11 @@ class User extends Authenticatable implements MustVerifyEmail
         'deleted_at' => 'datetime',
     ];
 
+    public function scopeFullName(): string
+    {
+        return $this->first_name . ' ' . $this->last_name;
+    }
+
     public function modelFilter()
     {
         return $this->provideFilter(UserFilter::class);

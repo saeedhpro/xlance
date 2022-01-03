@@ -39,6 +39,7 @@ use App\Models\Upload;
 use App\Models\User;
 use App\Models\WithdrawRequest;
 use Carbon\Carbon;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -85,7 +86,7 @@ class UserRepository extends BaseRepository implements UserInterface
     {
         $userRole = $request->get('role');
         $employer = Role::findByName('employer');
-        $freelancer  = Role::findByName('freelancer');
+        $freelancer = Role::findByName('freelancer');
         $user->as_employer = $userRole == 'employer';
         $user->assignRole($userRole == 'employer' ? $employer : $freelancer);
         $user->assignRole($employer);
@@ -96,17 +97,18 @@ class UserRepository extends BaseRepository implements UserInterface
     {
         /** @var User $user */
         $user = User::with(['profile', 'rates', 'experiences', 'educations', 'achievements', 'skills'])->whereEmail($request->username)
-        ->orWhere('username', $request->username)
-        ->first();
+            ->orWhere('username', $request->username)
+            ->first();
         return $user;
     }
 
-    public function freelancers() {
+    public function freelancers()
+    {
         $freelancers = User::all()->filter(function (User $user) {
             return $user->hasRole('freelancer');
         });
         $freelancers = $freelancers->sort(function (User $first, User $second) {
-            if($first->calcRates() == $second->calcRates()) {
+            if ($first->calcRates() == $second->calcRates()) {
                 return 0;
             }
             return $first->calcRates() > $second->calcRates() ? -1 : 1;
@@ -114,7 +116,8 @@ class UserRepository extends BaseRepository implements UserInterface
         return $freelancers;
     }
 
-    public function employers() {
+    public function employers()
+    {
         $employers = User::all()->filter(function (User $user) {
             return $user->hasRole('employer');
         });
@@ -140,7 +143,7 @@ class UserRepository extends BaseRepository implements UserInterface
             'user_id' => $user->id,
             'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
         ));
-        $admins = User::all()->filter(function (User $u){
+        $admins = User::all()->filter(function (User $u) {
             return $u->hasRole('admin');
         })->pluck('id');
         $ids = collect([]);
@@ -163,6 +166,7 @@ class UserRepository extends BaseRepository implements UserInterface
             'phone_number',
             'first_name',
             'last_name',
+            'new_national_card_id',
         ]));
         $notification = $user->notifs()->create(array(
             'text' => 'اطلاعات کاربر ویرایش شد',
@@ -170,7 +174,7 @@ class UserRepository extends BaseRepository implements UserInterface
             'user_id' => $user->id,
             'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
         ));
-        $admins = User::all()->filter(function (User $u){
+        $admins = User::all()->filter(function (User $u) {
             return $u->hasRole('admin');
         })->pluck('id');
         $ids = collect([]);
@@ -188,12 +192,12 @@ class UserRepository extends BaseRepository implements UserInterface
         $uid = $request->get('image_id');
         /** @var Upload $upload */
         $upload = Upload::find($uid);
-        if($profile->newAvatar()->first()) {
+        if ($profile->newAvatar()->first()) {
             $profile->newAvatar()->first()->update([
-               'name' => $upload->name,
-               'path' => $upload->path,
-               'user_id' => $profile->user->id,
-               'url' => url('/storage/'.$upload->path)
+                'name' => $upload->name,
+                'path' => $upload->path,
+                'user_id' => $profile->user->id,
+                'url' => url('/storage/' . $upload->path)
             ]);
             $profile->update([
                 'avatar_accepted' => false,
@@ -205,12 +209,25 @@ class UserRepository extends BaseRepository implements UserInterface
                 'path' => $upload->path,
                 'imageable_id' => $profile->id,
                 'user_id' => $profile->user->id,
-                'url' => url('/storage/'.$upload->path)
+                'url' => url('/storage/' . $upload->path)
             ]);
             $profile->update([
                 'new_avatar_id' => $image->id,
                 'avatar_accepted' => false
             ]);
+        }
+
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        foreach ($admins as $admin) {
+            $profile->user->notifs()->create([
+                'text' => 'کاربر ' . $profile->user->first_name . ' ' . $profile->user->last_name . ' تصویر پروفایل را ارسال کرده است .',
+                'type' => Notification::ADMIN_AVATAR_CREATED,
+                'user_id' => $admin->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
         }
         return $profile->newAvatar()->first();
     }
@@ -220,12 +237,12 @@ class UserRepository extends BaseRepository implements UserInterface
         $uid = $request->get('image_id');
         /** @var Upload $upload */
         $upload = Upload::find($uid);
-        if($profile->newBackground()->first()) {
+        if ($profile->newBackground()->first()) {
             $profile->newBackground()->first()->update([
-               'name' => $upload->name,
-               'path' => $upload->path,
-               'user_id' => $profile->user->id,
-               'url' => url('/storage/'.$upload->path)
+                'name' => $upload->name,
+                'path' => $upload->path,
+                'user_id' => $profile->user->id,
+                'url' => url('/storage/' . $upload->path)
             ]);
             $profile->update([
                 'bg_accepted' => false,
@@ -237,12 +254,25 @@ class UserRepository extends BaseRepository implements UserInterface
                 'path' => $upload->path,
                 'imageable_id' => $profile->id,
                 'user_id' => $profile->user->id,
-                'url' => url('/storage/'.$upload->path)
+                'url' => url('/storage/' . $upload->path)
             ]);
             $profile->update([
                 'new_bg_id' => $image->id,
                 'bg_accepted' => false,
             ]);
+        }
+
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        foreach ($admins as $admin) {
+            $profile->user->notifs()->create([
+                'text' => 'کاربر ' . $profile->user->first_name . ' ' . $profile->user->last_name . ' تصویر بکگراند را ارسال کرده است .',
+                'type' => Notification::ADMIN_AVATAR_CREATED,
+                'user_id' => $admin->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
         }
         return $profile->newBackground()->first();
     }
@@ -253,32 +283,45 @@ class UserRepository extends BaseRepository implements UserInterface
         /** @var Upload $upload */
         $upload = Upload::find($uid);
         /** @var Image $card */
-        $card = $profile->nationalCard()->first();
-        if($card) {
-            $profile->nationalCard()->first()->update([
-               'name' => $upload->name,
-               'path' => $upload->path,
-               'user_id' => $profile->user->id,
-               'url' => url('/storage/'.$upload->path)
+        $card = $profile->newNationalCard()->first();
+        if ($card) {
+            $profile->newNationalCard()->first()->update([
+                'name' => $upload->name,
+                'path' => $upload->path,
+                'user_id' => $profile->user->id,
+                'url' => url('/storage/' . $upload->path)
             ]);
             $profile->update([
                 'national_card_accepted' => false
             ]);
         } else {
             /** @var Image $image */
-            $image = $profile->nationalCard()->create([
+            $image = $profile->newNationalCard()->create([
                 'name' => $upload->name,
                 'path' => $upload->path,
                 'imageable_id' => $profile->id,
                 'user_id' => $profile->user->id,
-                'url' => url('/storage/'.$upload->path)
+                'url' => url('/storage/' . $upload->path)
             ]);
             $profile->update([
-                'national_card_id' => $image->id,
+                'new_national_card_id' => $image->id,
                 'national_card_accepted' => false
             ]);
         }
         $profile->save();
+
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        foreach ($admins as $admin) {
+            $profile->user->notifs()->create([
+                'text' => 'کاربر ' . $profile->user->first_name . ' ' . $profile->user->last_name . ' تصویر کارت ملی را ارسال کرده است .',
+                'type' => Notification::ADMIN_NATIONAL_CREATED,
+                'user_id' => $admin->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
+        }
         return $profile->nationalCard()->first();
     }
 
@@ -363,14 +406,11 @@ class UserRepository extends BaseRepository implements UserInterface
             'project_id' => $project->id,
             'status' => Conversation::OPEN_STATUS,
         ]);
-        $project->update([
-            'conversation_id' => $conversation->id,
-        ]);
         /** @var User $admin */
-        $admin = User::all()->filter(function(User $user) {
+        $admin = User::all()->filter(function (User $user) {
             return $user->hasRole('admin');
         })->first();
-        $body = 'توضیحات فریلنسر: پیشنهاد "'.$request->price.'" تومان در "'. $request->delivery_date .'" روز ';
+        $body = 'توضیحات فریلنسر: پیشنهاد "' . $request->price . '" تومان در "' . $request->delivery_date . '" روز ';
         $message = Message::create([
             'user_id' => $admin->id,
             'type' => Message::TEXT_TYPE,
@@ -392,7 +432,7 @@ class UserRepository extends BaseRepository implements UserInterface
         broadcast(new NewMessageEvent($message, $user));
         broadcast(new NewMessageEvent($message, $project->employer));
         broadcast(new NewMessageEvent($message, $admin));
-        if($requestForProjectRequest->has('new_secure_payments')) {
+        if ($requestForProjectRequest->has('new_secure_payments')) {
             $securePayments = $requestForProjectRequest->get('new_secure_payments');
             foreach ($securePayments as $payment) {
                 $request->securePayments()->create([
@@ -422,9 +462,18 @@ class UserRepository extends BaseRepository implements UserInterface
                 broadcast(new NewMessageEvent($message, $user));
                 broadcast(new NewMessageEvent($message, $employer));
                 broadcast(new NewMessageEvent($message, $admin));
+                $freelancer = $project->freelancer()->get();
+                $project->notifications()->create([
+                    'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $payment['price'] . 'ایجاد کرده است',
+                    'type' => Notification::PROJECT,
+                    'user_id' => $employer->id,
+                    'notifiable_id' => $project->id,
+                    'image_id' => null
+                ]);
+                Notification::sendNotificationToUsers(collect([$employer]));
             }
         }
-        if($user->number > $user->requests_count) {
+        if ($user->number > $user->requests_count) {
             $user->update([
                 'requests_count' => $user->requests_count + 1,
             ]);
@@ -433,11 +482,11 @@ class UserRepository extends BaseRepository implements UserInterface
         $wallet = $user->wallet;
         /** @var Setting $settings */
         $settings = Setting::all()->first();
-        if($requestForProjectRequest->is_distinguished) {
-            $wallet->forceWithdraw((int) $settings->distinguished_price);
+        if ($requestForProjectRequest->is_distinguished) {
+            $wallet->forceWithdraw((int)$settings->distinguished_price);
         }
-        if($requestForProjectRequest->is_sponsored) {
-            $wallet->forceWithdraw((int) $settings->sponsored_price);
+        if ($requestForProjectRequest->is_sponsored) {
+            $wallet->forceWithdraw((int)$settings->sponsored_price);
         }
         $user->save();
         return $request;
@@ -477,7 +526,7 @@ class UserRepository extends BaseRepository implements UserInterface
     {
         /** @var User $user */
         $user = $request->user;
-        if($projectRequest->accepted) {
+        if ($projectRequest->accepted) {
             $request->update([
                 'status' => ProjectRequest::ACCEPTED_STATUS
             ]);
@@ -489,15 +538,15 @@ class UserRepository extends BaseRepository implements UserInterface
                 'request_id' => $request->id,
                 'status' => AcceptFreelancerRequest::CREATED_STATUS
             ]);
-            $body = 'درخواست شما برای پروژه ی "'.$project->title.'" تایید شد';
-            $notificationBody = 'درخواست کاربر "'.$user->username.'" برای پروژه ی "'.$project->title.'" تایید شد';
+            $body = 'درخواست شما برای پروژه ی "' . $project->title . '" تایید شد';
+            $notificationBody = 'درخواست کاربر "' . $user->username . '" برای پروژه ی "' . $project->title . '" تایید شد';
             $project->notifications()->create(array(
                 'text' => $body,
                 'type' => Notification::PROJECT,
                 'user_id' => $user->id,
                 'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
             ));
-            $admins = User::all()->filter(function (User $u){
+            $admins = User::all()->filter(function (User $u) {
                 return $u->hasRole('admin');
             })->pluck('id');
             $ids = collect([$user->id]);
@@ -513,7 +562,7 @@ class UserRepository extends BaseRepository implements UserInterface
             $request->update([
                 'status' => ProjectRequest::REJECTED_STATUS
             ]);
-            if($project->selected_request_id == $request->id) {
+            if ($project->selected_request_id == $request->id) {
                 $project->update([
                     'selected_request_id' => null,
                     'request_select_date' => null,
@@ -521,15 +570,15 @@ class UserRepository extends BaseRepository implements UserInterface
                     'freelancer_id' => null,
                 ]);
             }
-            $body = 'درخواست شما برای پروژه ی "'.$project->title.'" رد شد';
-            $notificationBody = 'درخواست کاربر "'.$user->username.'" برای پروژه ی "'.$project->title.'" رد شد';
+            $body = 'درخواست شما برای پروژه ی "' . $project->title . '" رد شد';
+            $notificationBody = 'درخواست کاربر "' . $user->username . '" برای پروژه ی "' . $project->title . '" رد شد';
             $project->notifications()->create(array(
                 'text' => $body,
                 'type' => Notification::PROJECT,
                 'user_id' => $user->id,
                 'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
             ));
-            $admins = User::all()->filter(function (User $u){
+            $admins = User::all()->filter(function (User $u) {
                 return $u->hasRole('admin');
             })->pluck('id');
             $ids = collect([]);
@@ -547,9 +596,10 @@ class UserRepository extends BaseRepository implements UserInterface
         $project->save();
         return $request;
     }
+
     public function freelancerAcceptOrRejectRequest(AcceptOrRejectProjectRequest $projectRequest, Project $project, AcceptFreelancerRequest $freelancerRequest)
     {
-        if($projectRequest->accepted) {
+        if ($projectRequest->accepted) {
             $user = $project->employer;
 
             /** @var Conversation $conversation */
@@ -562,7 +612,7 @@ class UserRepository extends BaseRepository implements UserInterface
                 'freelancer_id' => $freelancerRequest->freelancer->id
             ]);
             $freelancerRequest->update([
-               'status' => AcceptFreelancerRequest::ACCEPTED_STATUS
+                'status' => AcceptFreelancerRequest::ACCEPTED_STATUS
             ]);
             /** @var ProjectRequest $request */
             $request = $freelancerRequest->request;
@@ -572,15 +622,15 @@ class UserRepository extends BaseRepository implements UserInterface
             $request->save();
             $this->acceptSecurePayments($freelancerRequest->request);
             $this->rejectProjectOtherRequests($freelancerRequest->request);
-            $body = 'فریلنسر درخواست شما برای پروژه ی "'.$project->title.'" را تایید کرد';
-            $notificationBody = 'درخواست کارفرما "'.$project->employer->username.'" برای پروژه ی "'.$project->title.'" توسط فریلنسر تایید شد';
+            $body = 'فریلنسر درخواست شما برای پروژه ی "' . $project->title . '" را تایید کرد';
+            $notificationBody = 'درخواست کارفرما "' . $project->employer->username . '" برای پروژه ی "' . $project->title . '" توسط فریلنسر تایید شد';
             $project->notifications()->create(array(
                 'text' => $body,
                 'type' => Notification::PROJECT,
                 'user_id' => $user->id,
                 'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
             ));
-            $admins = User::all()->filter(function (User $u){
+            $admins = User::all()->filter(function (User $u) {
                 return $u->hasRole('admin');
             })->pluck('id');
             $ids = collect($admins->values());
@@ -609,7 +659,7 @@ class UserRepository extends BaseRepository implements UserInterface
                 'status' => ProjectRequest::REJECTED_STATUS,
             ]);
             $req->securePayments()->delete();
-            if($project->selected_request_id == $req->id) {
+            if ($project->selected_request_id == $req->id) {
                 $project->update([
                     'selected_request_id' => null,
                     'request_select_date' => null,
@@ -618,15 +668,15 @@ class UserRepository extends BaseRepository implements UserInterface
                 ]);
             }
             $user = $project->employer;
-            $body = 'فریلنسر درخواست شما برای پروژه ی "'.$project->title.'" را رد کرد';
-            $notificationBody = 'درخواست کارفرما "'.$user->username.'" برای پروژه ی "'.$project->title.'" توسط فریلنسر رد شد';
+            $body = 'فریلنسر درخواست شما برای پروژه ی "' . $project->title . '" را رد کرد';
+            $notificationBody = 'درخواست کارفرما "' . $user->username . '" برای پروژه ی "' . $project->title . '" توسط فریلنسر رد شد';
             $project->notifications()->create(array(
                 'text' => $body,
                 'type' => Notification::PROJECT,
                 'user_id' => $user->id,
                 'image_id' => $user->profile->avatar ? $user->profile->avatar->id : null
             ));
-            $admins = User::all()->filter(function (User $u){
+            $admins = User::all()->filter(function (User $u) {
                 return $u->hasRole('admin');
             })->pluck('id');
             $ids = collect([]);
@@ -658,18 +708,18 @@ class UserRepository extends BaseRepository implements UserInterface
         /** @var User $auth */
         $auth = auth()->user();
         /** @var Wallet $wallet */
-       try {
+        try {
             $invoice = new Invoice;
-             $invoice->amount((int) ($amount / 10));
+            $invoice->amount((int)($amount / 10));
             $invoice->detail(['detailName' => 'your detail goes here']);
-            $invoice->detail('detailName','your detail goes here');
-            $invoice->detail(['name1' => 'detail1','name2' => 'detail2']);
-            $invoice->detail('detailName1','your detail1 goes here')
-                ->detail('detailName2','your detail2 goes here');
+            $invoice->detail('detailName', 'your detail goes here');
+            $invoice->detail(['name1' => 'detail1', 'name2' => 'detail2']);
+            $invoice->detail('detailName1', 'your detail1 goes here')
+                ->detail('detailName2', 'your detail2 goes here');
             $invoice->detail('t_id', $invoice->getTransactionId());
-            return Payment::purchase($invoice, function($driver, $transactionId) use($auth, $invoice){
+            return Payment::purchase($invoice, function ($driver, $transactionId) use ($auth, $invoice) {
                 $t = Transaction::create([
-                    'user_id' =>  $auth->id,
+                    'user_id' => $auth->id,
                     'transaction_id' => $transactionId,
                     'type' => Transaction::DEPOSIT_TYPE,
                     'status' => Transaction::CREATED_STATUS,
@@ -679,7 +729,7 @@ class UserRepository extends BaseRepository implements UserInterface
                     'status' => PaymentHistory::CREATED_STATUS,
                     'type' => PaymentHistory::DEPOSIT_TYPE,
                     'history_id' => $t->id,
-                    'amount' => (int) $invoice->getAmount() * 10,
+                    'amount' => (int)$invoice->getAmount() * 10,
                 ]);
             })->pay()->toJson();
         } catch (UnacceptedTransactionException $e) {
@@ -693,14 +743,14 @@ class UserRepository extends BaseRepository implements UserInterface
         $auth = auth()->user();
         try {
             $w = $auth->withdraws()->create([
-                'amount' => (int) $amount,
+                'amount' => (int)$amount,
                 'status' => WithdrawRequest::CREATED_STATUS,
             ]);
             $auth->histories()->create([
-               'status' => PaymentHistory::CREATED_STATUS,
-               'type' => PaymentHistory::WITHDRAW_TYPE,
-               'history_id' => $w->id,
-               'amount' => (int) $amount
+                'status' => PaymentHistory::CREATED_STATUS,
+                'type' => PaymentHistory::WITHDRAW_TYPE,
+                'history_id' => $w->id,
+                'amount' => (int)$amount
             ]);
             return true;
         } catch (UnacceptedTransactionException $e) {
@@ -729,7 +779,7 @@ class UserRepository extends BaseRepository implements UserInterface
         /** @var User $user */
         $user = $this->findOneOrFail($id);
         $posts_id = $user->likes()->withType(Post::class)->pluck('likeable_id');
-        return Post::whereIn('id',$posts_id)->get();
+        return Post::whereIn('id', $posts_id)->get();
     }
 
     public function ownSavedPosts()
@@ -744,7 +794,7 @@ class UserRepository extends BaseRepository implements UserInterface
         /** @var User $user */
         $user = $this->findOneOrFail($id);
         $posts_id = $user->favorites()->withType(Post::class)->pluck('favoriteable_id');
-        return Post::whereIn('id',$posts_id)->get();
+        return Post::whereIn('id', $posts_id)->get();
     }
 
     public function ownBookmarkedPosts()
@@ -767,7 +817,7 @@ class UserRepository extends BaseRepository implements UserInterface
         /** @var User $user */
         $user = $this->findOneOrFail($id);
         $posts_id = $user->bookmarks()->withType(Post::class)->pluck('model_id');
-        return Post::whereIn('id',$posts_id)->get();
+        return Post::whereIn('id', $posts_id)->get();
     }
 
     public function authPortfolios()
@@ -790,7 +840,7 @@ class UserRepository extends BaseRepository implements UserInterface
         $auth = auth()->user();
         /** @var User $user */
         $user = $auth->blockedUsers()->find($id);
-        if(!$user) {
+        if (!$user) {
             $user = $this->findOneOrFail($id);
             $auth->blockedUsers()->save($user);
             return true;
@@ -809,12 +859,12 @@ class UserRepository extends BaseRepository implements UserInterface
 
     private function setIntroducer(RegisterRequest $request, User $user)
     {
-        if($request->has('introducer')) {
+        if ($request->has('introducer')) {
             /** @var User $introducer */
             $introducer = $this->findOneBy(['username' => $request->get('introducer')]);
-            if($introducer && $introducer->hasRole('freelancer')) {
+            if ($introducer && $introducer->hasRole('freelancer')) {
                 $introducer->introduces()->save($user);
-                if($introducer->introduces()->count() > 9) {
+                if ($introducer->introduces()->count() > 9) {
                     $introducer->is_businessed = true;
                     $introducer->save();
                 }
@@ -838,6 +888,13 @@ class UserRepository extends BaseRepository implements UserInterface
         return $auth->notifs()->orderByDesc('created_at')->get();
     }
 
+    public function authNotificationsPaginate($limit): LengthAwarePaginator
+    {
+        /** @var User $auth */
+        $auth = auth()->user();
+        return $auth->notifs()->orderByDesc('created_at')->paginate($limit);
+    }
+
     public function seenNotifications()
     {
         /** @var User $auth */
@@ -853,26 +910,26 @@ class UserRepository extends BaseRepository implements UserInterface
         $auth = auth()->user();
         $auth_skills = $auth->skills()->pluck('skills.id as id');
         return Project::query()->with(['skills', 'employer', 'freelancer'])
-            ->where(function ($q) use($auth_skills){
+            ->where(function ($q) use ($auth_skills) {
                 $q->where('status', '=', Project::PUBLISHED_STATUS);
                 $q->where('created_at', '>=', Carbon::now()->subDays(14));
-                $q->whereHas('skills', function ($query) use($auth_skills) {
+                $q->whereHas('skills', function ($query) use ($auth_skills) {
                     $query->whereIn('skills.id', $auth_skills);
                 });
-        })->orderByDesc('created_at')->get();
+            })->orderByDesc('created_at')->get();
     }
 
     public function acceptOrRejectAvatar(AcceptOrRejectProjectRequest $request, Profile $profile)
     {
         /** @var User $user */
         $user = $profile->user;
-        $admins = User::all()->filter(function (User $u){
+        $admins = User::all()->filter(function (User $u) {
             return $u->hasRole('admin');
         })->pluck('id');
         $ids = collect($admins->values());
         $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
         $users = User::all()->whereIn('id', $ids->toArray());
-        if($request->accepted) {
+        if ($request->accepted) {
             $profile->update([
                 'avatar_accepted' => true,
                 'avatar_id' => $profile->new_avatar_id
@@ -885,14 +942,14 @@ class UserRepository extends BaseRepository implements UserInterface
             ));
             foreach ($ids as $id) {
                 $user->notifs()->create(array(
-                    'text' => 'عکس پروفایل کاربر '.$user->username.' تایید شد',
+                    'text' => 'عکس پروفایل کاربر ' . $user->username . ' تایید شد',
                     'type' => Notification::EMPLOYER,
                     'user_id' => $id,
                     'image_id' => null,
                 ));
             }
             Notification::sendNotificationToUsers(collect([$user]));
-            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید شد', 'عکس پروفایل کاربر '.$user->username.' تایید شد', null);
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر ' . $user->username . ' تایید شد', 'عکس پروفایل کاربر ' . $user->username . ' تایید شد', null);
             Notification::sendNotificationToUsers($users);
             return true;
         } else {
@@ -909,14 +966,14 @@ class UserRepository extends BaseRepository implements UserInterface
             ));
             foreach ($ids as $id) {
                 $user->notifs()->create(array(
-                    'text' => 'عکس پروفایل کاربر '.$user->username.' تایید نشد',
+                    'text' => 'عکس پروفایل کاربر ' . $user->username . ' تایید نشد',
                     'type' => Notification::PROJECT,
                     'user_id' => $id,
                     'image_id' => null
                 ));
             }
             Notification::sendNotificationToUsers(collect([$user]));
-            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید نشد', 'عکس پروفایل کاربر '.$user->username.' تایید نشد', null);
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر ' . $user->username . ' تایید نشد', 'عکس پروفایل کاربر ' . $user->username . ' تایید نشد', null);
             Notification::sendNotificationToUsers($users);
             return false;
         }
@@ -926,14 +983,14 @@ class UserRepository extends BaseRepository implements UserInterface
     {
         /** @var User $user */
         $user = $profile->user;
-        $admins = User::all()->filter(function (User $u){
+        $admins = User::all()->filter(function (User $u) {
             return $u->hasRole('admin');
         })->pluck('id');
         $ids = collect($admins->values());
         $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
         $users = User::all()->whereIn('id', $ids->toArray());
 
-        if($request->accepted) {
+        if ($request->accepted) {
             $profile->update([
                 'bg_accepted' => true,
                 'bg_id' => $profile->new_bg_id
@@ -946,14 +1003,14 @@ class UserRepository extends BaseRepository implements UserInterface
             ));
             foreach ($ids as $id) {
                 $user->notifs()->create(array(
-                    'text' => 'عکس پس زمینه کاربر '.$user->username.' تایید شد',
+                    'text' => 'عکس پس زمینه کاربر ' . $user->username . ' تایید شد',
                     'type' => Notification::EMPLOYER,
                     'user_id' => $id,
                     'image_id' => null,
                 ));
             }
             Notification::sendNotificationToUsers(collect([$user]));
-            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید شد', 'عکس پروفایل کاربر '.$user->username.' تایید شد', null);
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر ' . $user->username . ' تایید شد', 'عکس پروفایل کاربر ' . $user->username . ' تایید شد', null);
             Notification::sendNotificationToUsers($users);
 
             return true;
@@ -971,14 +1028,14 @@ class UserRepository extends BaseRepository implements UserInterface
             ));
             foreach ($ids as $id) {
                 $user->notifs()->create(array(
-                    'text' => 'عکس پس زمینه کاربر '.$user->username.' تایید نشد',
+                    'text' => 'عکس پس زمینه کاربر ' . $user->username . ' تایید نشد',
                     'type' => Notification::PROJECT,
                     'user_id' => $id,
                     'image_id' => null
                 ));
             }
             Notification::sendNotificationToUsers(collect([$user]));
-            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر '.$user->username.' تایید نشد', 'عکس پروفایل کاربر '.$user->username.' تایید نشد', null);
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس پروفایل کاربر ' . $user->username . ' تایید نشد', 'عکس پروفایل کاربر ' . $user->username . ' تایید نشد', null);
             Notification::sendNotificationToUsers($users);
             return false;
         }
@@ -986,45 +1043,64 @@ class UserRepository extends BaseRepository implements UserInterface
 
     public function acceptOrRejectNationalCard(AcceptOrRejectProjectRequest $request, Profile $profile)
     {
-        $profile->update([
-            'national_card_accepted' => (bool)$request->accepted
-        ]);
-        if(!$request->accepted) {
-            $profile->nationalCard()->delete();
-            $profile->update([
-                'national_card_id' => null
-            ]);
-        }
         /** @var User $user */
         $user = $profile->user;
-        $admins = User::all()->filter(function (User $u){
+        $admins = User::all()->filter(function (User $u) {
             return $u->hasRole('admin');
         })->pluck('id');
         $ids = collect($admins->values());
         $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
         $users = User::all()->whereIn('id', $ids->toArray());
-        $user->notifs()->create(array(
-            'text' => $request->accepted ? 'عکس کارت ملی شما تایید شد' : 'عکس کارت ملی شما تایید نشد',
-            'type' => Notification::PROJECT,
-            'user_id' => $user->id,
-            'image_id' => null
-        ));
-        foreach ($ids as $id) {
+
+        if ($request->accepted) {
+            $profile->update([
+                'national_card_accepted' => true,
+                'national_card_id' => $profile->new_national_card_id
+            ]);
             $user->notifs()->create(array(
-                'text' => $request->accepted ? 'عکس کارت ملی کاربر '.$user->username.' تایید شد' : 'عکس کارت ملی کاربر '.$user->username.' تایید نشد',
-                'type' => Notification::PROJECT,
-                'user_id' => $id,
+                'text' => 'عکس کارت ملی شما تایید شد',
+                'type' => Notification::EMPLOYER,
+                'user_id' => $user->id,
                 'image_id' => null
             ));
+            foreach ($ids as $id) {
+                $user->notifs()->create(array(
+                    'text' => 'عکس کارت ملی کاربر ' . $user->username . ' تایید شد',
+                    'type' => Notification::EMPLOYER,
+                    'user_id' => $id,
+                    'image_id' => null,
+                ));
+            }
+            Notification::sendNotificationToUsers(collect([$user]));
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس کارت ملی کاربر ' . $user->username . ' تایید شد', 'عکس پروفایل کاربر ' . $user->username . ' تایید شد', null);
+            Notification::sendNotificationToUsers($users);
+
+            return true;
+        } else {
+            $profile->newNationalCard()->delete();
+            $profile->update([
+                'national_card_accepted' => false,
+                'new_national_card_id' => null
+            ]);
+            $user->notifs()->create(array(
+                'text' => 'عکس کارت ملی شما تایید نشد',
+                'type' => Notification::PROJECT,
+                'user_id' => $user->id,
+                'image_id' => null
+            ));
+            foreach ($ids as $id) {
+                $user->notifs()->create(array(
+                    'text' => 'عکس کارت ملی کاربر ' . $user->username . ' تایید نشد',
+                    'type' => Notification::PROJECT,
+                    'user_id' => $id,
+                    'image_id' => null
+                ));
+            }
+            Notification::sendNotificationToUsers(collect([$user]));
+            Notification::sendNotificationToAll($emails->toArray(), 'عکس کارت ملی کاربر ' . $user->username . ' تایید نشد', 'عکس پروفایل کاربر ' . $user->username . ' تایید نشد', null);
+            Notification::sendNotificationToUsers($users);
+            return false;
         }
-        Notification::sendNotificationToUsers(collect([$user]));
-        Notification::sendNotificationToAll($emails->toArray(),
-            $request->accepted ? 'عکس کارت ملی کاربر '.$user->username.' تایید شد' : 'عکس کارت ملی کاربر '.$user->username.' تایید نشد',
-            $request->accepted ? 'عکس کارت ملی کاربر '.$user->username.' تایید شد' : 'عکس کارت ملی کاربر '.$user->username.' تایید نشد',
-            null);
-        Notification::sendNotificationToUsers($users);
-        dispatch(new ValidateUserJob($profile->user));
-        return (bool)$request->accepted;
     }
 
     public function acceptOrRejectSheba(AcceptOrRejectProjectRequest $request, Profile $profile)
@@ -1032,14 +1108,14 @@ class UserRepository extends BaseRepository implements UserInterface
         $profile->update([
             'sheba_accepted' => $request->accepted ? true : false
         ]);
-        if(!$request->accepted) {
+        if (!$request->accepted) {
             $profile->update([
                 'sheba' => null
             ]);
         }
         /** @var User $user */
         $user = $profile->user;
-        $admins = User::all()->filter(function (User $u){
+        $admins = User::all()->filter(function (User $u) {
             return $u->hasRole('admin');
         })->pluck('id');
         $ids = collect($admins->values());
@@ -1053,7 +1129,7 @@ class UserRepository extends BaseRepository implements UserInterface
         ));
         foreach ($ids as $id) {
             $user->notifs()->create(array(
-                'text' => $request->accepted ? 'شماره شبا کاربر '.$user->username.' تایید شد' : 'شماره شبا کاربر '.$user->username.' تایید نشد',
+                'text' => $request->accepted ? 'شماره شبا کاربر ' . $user->username . ' تایید شد' : 'شماره شبا کاربر ' . $user->username . ' تایید نشد',
                 'type' => Notification::PROJECT,
                 'user_id' => $id,
                 'image_id' => null
@@ -1061,8 +1137,8 @@ class UserRepository extends BaseRepository implements UserInterface
         }
         Notification::sendNotificationToUsers(collect([$user]));
         Notification::sendNotificationToAll($emails->toArray(),
-            $request->accepted ? 'شماره شبا کاربر '.$user->username.' تایید شد' : 'شماره شبا کاربر '.$user->username.' تایید نشد',
-            $request->accepted ? 'شماره شبا کاربر '.$user->username.' تایید شد' : 'شماره شبا کاربر '.$user->username.' تایید نشد',
+            $request->accepted ? 'شماره شبا کاربر ' . $user->username . ' تایید شد' : 'شماره شبا کاربر ' . $user->username . ' تایید نشد',
+            $request->accepted ? 'شماره شبا کاربر ' . $user->username . ' تایید شد' : 'شماره شبا کاربر ' . $user->username . ' تایید نشد',
             null);
         Notification::sendNotificationToUsers($users);
         return $request->accepted ? true : false;
@@ -1074,6 +1150,19 @@ class UserRepository extends BaseRepository implements UserInterface
             'sheba' => $request->sheba,
             'sheba_accepted' => false
         ]);
+        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
+            $q->where('name', '=', 'admin');
+        })->get();
+        $user = $profile->user;
+        foreach ($admins as $admin) {
+            $profile->user->notifs()->create([
+                'text' => "$user->first_name $user->last_name شماره شبا را ارسال کرده است.",
+                'type' => Notification::ADMIN_SHEBA,
+                'user_id' => $admin->id,
+                'image_id' => null
+            ]);
+            Notification::sendNotificationToUsers(collect([$admin]));
+        }
         return $updated;
     }
 
@@ -1154,7 +1243,8 @@ class UserRepository extends BaseRepository implements UserInterface
         return $auth->withdraws()->where('status', '=', WithdrawRequest::REJECTED_STATUS)->get();
     }
 
-    private function rejectProjectOtherRequests(ProjectRequest $request) {
+    private function rejectProjectOtherRequests(ProjectRequest $request)
+    {
         $otherRequests = $request->project->requests()->where('id', '!=', $request->id);
         $otherRequests->update([
             'status' => ProjectRequest::REJECTED_STATUS,
@@ -1178,7 +1268,7 @@ class UserRepository extends BaseRepository implements UserInterface
         $auth = auth()->user();
         /** @var Message $message */
         $message = Message::findOrFail($seenMessageRequest->message_id);
-        if($auth->id != $message->user_id) {
+        if ($auth->id != $message->user_id) {
             /** @var Conversation $conversation */
             $conversation = $message->conversation;
             $message->update([

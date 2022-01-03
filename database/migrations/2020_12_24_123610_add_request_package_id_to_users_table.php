@@ -27,6 +27,7 @@ class AddRequestPackageIdToUsersTable extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             $table->dropForeign('users_request_package_id_foreign');
+            $table->dropColumn('request_package_id');
         });
     }
 }

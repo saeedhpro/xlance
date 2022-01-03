@@ -31,7 +31,7 @@ class UpdateUserRequest extends FormRequest
             'first_name' => 'nullable|string',
             'last_name' => 'nullable|string',
             'as_employer' => 'required|boolean',
-            'new_bg_id' => 'nullable'
+            'new_national_card_id' => 'nullable'
         ];
     }
 }

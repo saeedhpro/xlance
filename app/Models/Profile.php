@@ -37,6 +37,7 @@ class Profile extends Model
         'bg_id',
         'new_bg_id',
         'national_card_id',
+        'new_national_card_id',
         'national_card_accepted',
         'sheba_accepted',
         'sheba',
@@ -79,6 +80,11 @@ class Profile extends Model
     public function nationalCard()
     {
         return $this->morphOne(Image::class, 'imageable', 'imageable_type', 'id', 'national_card_id');
+    }
+
+    public function newNationalCard()
+    {
+        return $this->morphOne(Image::class, 'imageable', 'imageable_type', 'id', 'new_national_card_id');
     }
 
 }
