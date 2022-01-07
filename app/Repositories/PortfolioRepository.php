@@ -57,13 +57,17 @@ class PortfolioRepository extends BaseRepository implements PortfolioInterface
         /** @var Portfolio $portfolio */
         $portfolio = $this->findOneOrFail($id);
         $auth->like($portfolio);
-        $notification = $portfolio->notifications()->create(array(
-            'text' => 'نمونه کار لایک شد',
-            'type' => Notification::PORTFOLIO,
-            'user_id' => $auth->id,
-            'image_id' => $auth->profile->avatar ? $auth->profile->avatar->id : null
-        ));
-        Notification::sendNotificationToAll([$portfolio->user->email], 'نمونه کار لایک شد', 'نمونه کار لایک شد', null);
+        $text = 'نمونه کار لایک شد';
+        $type = Notification::PORTFOLIO;
+        Notification::make(
+            $type,
+            $text,
+            $portfolio->user->id,
+            $text,
+            get_class($portfolio),
+            $portfolio->id,
+            false
+        );
         return true;
     }
 

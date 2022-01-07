@@ -192,7 +192,7 @@ Route::prefix('/user')->middleware('auth:api')->group(function () {
         Route::get('/{project}/accepted/{accept}', [UserController::class, 'freelancerGetAcceptProjectRequest'])->name('user.projects.accept.get');
         Route::post('/{project}/accepted/{accept}/accept', [UserController::class, 'freelancerAcceptOrRejectRequest'])->name('user.projects.freelancerAcceptOrRejectRequest');
         Route::post('/{project}/attachments', [ProjectController::class, 'addAttachment'])->name('user.projects.addAttachment');
-        Route::delete('/{project}/attachments/{attachment}', [PrtojectController::class, 'destroyAttachment'])->name('user.projects.destroyAttachment');
+        Route::delete('/{project}/attachments/{attachment}', [ProjectController::class, 'destroyAttachment'])->name('user.projects.destroyAttachment');
     });
     Route::post('/follow', [UserController::class, 'follow'])->name('user.follow');
     Route::post('/unfollow', [UserController::class, 'unFollow'])->name('user.unFollow');

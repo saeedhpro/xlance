@@ -180,27 +180,28 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
             broadcast(new NewMessageNotificationEvent($freelancer, $freelancer->newMessagesCount(), $nonce));
             broadcast(new NewMessageEvent($message, $project->employer));
             broadcast(new NewMessageEvent($message, $project->freelancer));
-            $project->notifications()->create([
-                'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $p['price'] . 'ایجاد کرده است',
-                'type' => Notification::PROJECT,
-                'user_id' => $employer->id,
-                'notifiable_id' => $project->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$employer]));
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
-            $freelancer = $project->freelancer;
-            foreach ($admins as $admin) {
-                $freelancer->notifs()->create([
-                    'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $p['price'] . 'ایجاد کرده است',
-                    'type' => Notification::ADMIN_RECORDS,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+            $text = $freelancer->username . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $p['price'] . 'ایجاد کرده است';
+            $type = Notification::PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                $employer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false,
+            );
+            $text = $freelancer->username . 'برای پروژه ' . $project->title . 'پرداخت امن ' . $p['price'] . 'ایجاد کرده است';
+            $type = Notification::ADMIN_RECORDS;
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($freelancer),
+                $freelancer->id,
+                true,
+            );
         }
         return $req;
     }
@@ -266,50 +267,55 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
                     'price' => $request->price + $payment->price
                 ]);
             }
-            $project->notifications()->create([
-                'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را پذیرفت',
-                'type' => Notification::PROJECT,
-                'user_id' => $user->id,
-                'notifiable_id' => $project->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$employer]));
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
-            foreach ($admins as $admin) {
-                $project->notifications()->create([
-                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را پذیرفت',
-                    'type' => Notification::ADMIN_PROJECT,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+            $text = $employer->username . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را پذیرفت';
+            $type = Notification::PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                $employer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false,
+            );
+            $text = $employer->username . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را پذیرفت';
+            $type = Notification::ADMIN_PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($project),
+                $project->id,
+                true,
+            );
         } else {
             $payment->update([
                 'status' => SecurePayment::REJECTED_STATUS
             ]);
-            $project->notifications()->create([
-                'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را رد کرد.',
-                'type' => Notification::PROJECT,
-                'user_id' => $user->id,
-                'notifiable_id' => $project->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$user]));
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
-            foreach ($admins as $admin) {
-                $project->notifications()->create([
-                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را رد کرد.',
-                    'type' => Notification::ADMIN_PROJECT,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+
+            $text = $employer->username . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را رد کرد';
+            $type = Notification::PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                $employer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false,
+            );
+            $text = $employer->username . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را رد کرد';
+            $type = Notification::ADMIN_PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($project),
+                $project->id,
+                true,
+            );
         }
         return $accepted;
     }
@@ -346,18 +352,17 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
             ]);
             $project = $request->project;
             $employer = $project->employer;
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
-            foreach ($admins as $admin) {
-                $project->notifications()->create([
-                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را آزاد کرد',
-                    'type' => Notification::ADMIN_PROJECT,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+            $text = $employer->username . 'برای پروژه ' . $project->title . ' پرداخت امن '. $payment->price .' را آزاد کرد';
+            $type = Notification::ADMIN_PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($project),
+                $project->id,
+                true,
+            );
             return true;
         } catch (\Exception $exception) {
             return false;
@@ -412,31 +417,26 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
             'status' => Project::FINISHED_STATUS,
         ]);
         $project->save();
-        $notificationBody = 'کارفرما پروژه ی '. $project->title .' را تمام کرد';
-        $project->notifications()->create(array(
-            'text' => $notificationBody,
-            'type' => Notification::PROJECT,
-            'user_id' => $project->employer->id,
-            'image_id' => $project->employer->profile->avatar ? $project->employer->profile->avatar->id : null
-        ));
-        $notificationBody = 'کارفرما پروژه ی '. $project->title .' را تمام کرد';
-        $project->notifications()->create(array(
-            'text' => $notificationBody,
-            'type' => Notification::PROJECT,
-            'user_id' => $project->freelancer->id,
-            'image_id' => $project->freelancer->profile->avatar ? $project->freelancer->profile->avatar->id : null
-        ));
-        Notification::sendNotificationToUsers(collect([$project->freelancer]));
-        Notification::sendNotificationToUsers(collect([$project->employer]));
-        $admins = User::all()->filter(function (User $u){
-            return $u->hasRole('admin');
-        })->pluck('id');
-        $ids2 = collect($admins->values());
-        $emails2 = User::all()->whereIn('id', $ids2->toArray())->pluck('email');
-        $users = User::all()->whereIn('id', $ids2->toArray());
-        Notification::sendNotificationToAll($emails2->toArray(), $notificationBody, $notificationBody, null);
-        Notification::sendNotificationToAll([$project->freelancer->email, $project->employer->email], $notificationBody, $notificationBody, null);
-        Notification::sendNotificationToUsers($users);
+        $text = 'کارفرما پروژه ی '. $project->title .' را تمام کرد';
+        $type = Notification::PROJECT;
+        Notification::make(
+            $type,
+            $text,
+            $project->employer->id,
+            $text,
+            get_class($project),
+            $project->id,
+            false,
+        );
+        Notification::make(
+            $type,
+            $text,
+            $project->freelancer->id,
+            $text,
+            get_class($project),
+            $project->id,
+            false,
+        );
         return true;
     }
 
@@ -454,27 +454,28 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
                 'rater_id' => $emp->id,
                 'project_id' => $project->id,
             ]);
-            $emp->notifs()->create([
-                'text' => 'نظر شما برای ' . $user->first_name . '' . $user->last_name . 'با موفقیت ثبت شد و در پروفایل ایشان نمایش داده خواهد شد.',
-                'type' => Notification::RATE_FREELANCER,
-                'user_id' => $emp->id,
-                'notifiable_id' => $emp->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$user]));
-
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
-            foreach ($admins as $admin) {
-                $project->notifications()->create([
-                    'text' => $emp->first_name . '' . $emp->last_name . 'برای اتمام پروژه ' . $project->title . ' نظر ثبت کرده است.',
-                    'type' => Notification::ADMIN_PROJECT,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+            $text = 'نظر شما برای ' . $user->username . 'با موفقیت ثبت شد و در پروفایل ایشان نمایش داده خواهد شد.';
+            $type = Notification::RATE_FREELANCER;
+            Notification::make(
+                $type,
+                $text,
+                $emp->id,
+                $text,
+                get_class($emp),
+                $emp->id,
+                false,
+            );
+            $text = $emp->username . 'برای اتمام پروژه ' . $project->title . ' نظر ثبت کرده است.';
+            $type = Notification::ADMIN_PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($emp),
+                $emp->id,
+                true,
+            );
             return true;
         }
         return false;
@@ -558,15 +559,16 @@ class ProjectRepository extends BaseRepository implements ProjectInterface
 
     private function sendNotification(Project $project, User $user, bool $accepted)
     {
-        $notification = $project->notifications()->create(array(
-            'text' => $accepted ? 'درخواست لغو پروژه ی '. $project->title .' تایید شد' : 'درخواست لغو پروژه ی '. $project->title .' تایید نشد',
-            'type' => Notification::PROJECT,
-            'user_id' => $user->id,
-            'image_id' => $project->freelancer->profile->avatar ? $project->freelancer->profile->avatar->id : null
-        ));
-        $users = collect();
-        $users->add($user);
-        Notification::sendNotificationToAll([$user->email], $accepted ? 'درخواست لغو پروژه ی '. $project->title .' تایید شد' : 'درخواست لغو پروژه ی '. $project->title .' تایید نشد',$accepted ? 'درخواست لغو پروژه ی '. $project->title .' تایید شد' : 'درخواست لغو پروژه ی '. $project->title .' تایید نشد', null);
-        Notification::sendNotificationToUsers($users);
+        $text = $accepted ? 'درخواست لغو پروژه ی '. $project->title .' تایید شد' : 'درخواست لغو پروژه ی '. $project->title .' تایید نشد';
+        $type = Notification::PROJECT;
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($project),
+            $project->id,
+            false,
+        );
     }
 }

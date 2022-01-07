@@ -132,23 +132,17 @@ class StoryRepository extends BaseRepository implements StoryInterface
         if($attributes['image_id']) {
             $story = $this->setImage($story, $attributes['image_id']);
         }
-        $notification = $story->notifications()->create(array(
-            'text' => 'استوری ایجاد شد',
-            'type' => Notification::STORY,
-            'user_id' => $user->id,
-            'image_id' => $story->media ? $story->media->id : null
-        ));
-        $users = $user->followers->pluck('id');
-        $admins = User::all()->filter(function (User $u){
-            return $u->hasRole('admin');
-        })->pluck('id');
-        $ids = Collection::make($users);
-        $ids->push($admins->values());
-        $ids->push($user->id);
-        $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-        $users = User::all()->whereIn('id', $ids->toArray());
-        Notification::sendNotificationToAll($emails->toArray(), 'استوری ایجاد شد', 'استوری ایجاد شد', null);
-        Notification::sendNotificationToUsers($users);
+        $text = 'استوری ایجاد شد';
+        $type = Notification::STORY;
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($story),
+            $story->id,
+            false,
+        );
         return $story;
     }
 

@@ -91,34 +91,33 @@ class UserController extends Controller
         /** @var User $user */
         $user = $this->userRepository->register($request);
         $token = $user->createToken('xlance')->accessToken;
-        if ($request->get('role') == 'employer') {
-            $user->notifs()->create([
-                'text' => 'به ایکس لنس خوش آمدید، برای شروع مهارت های خود را انتخاب کنید',
-                'type' => Notification::SKILLS,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+        if ($request->get('role') == 'freelancer') {
+            $text = 'به ایکس لنس خوش آمدید، برای شروع مهارت های خود را انتخاب کنید';
+            $type = Notification::SKILLS;
         } else {
-            $user->notifs()->create([
-                'text' => 'به ایکس لنس خوش آمدید، اولین پروژه خود را ثبت کنید',
-                'type' => Notification::REGISTER,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'به ایکس لنس خوش آمدید، اولین پروژه خود را ثبت کنید';
+            $type = Notification::REGISTER;
         }
-        Notification::sendNotificationToUsers(collect([$user]));
-        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-            $q->where('name', '=', 'admin');
-        })->get();
-        foreach ($admins as $admin) {
-            $admin->notifs()->create([
-                'text' => 'کاربر ' . $user->fullName . 'در سایت ثبت نام کرد',
-                'type' => Notification::REGISTER,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$admin]));
-        }
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($user),
+            $user->id,
+            false
+        );
+        $text = 'کاربر ' . $user->fullName . 'در سایت ثبت نام کرد';
+        $type = Notification::REGISTER;
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($user),
+            $user->id,
+            true
+        );
         return \response()->json(['token' => $token, 'user' => new UserResource($user)], 201);
     }
 
@@ -212,13 +211,17 @@ class UserController extends Controller
         $user = User::whereEmail($request->email)->first();
         if ($user) {
             $user->update(['password' => bcrypt($request->password)]);
-            $user->notifs()->create([
-                'text' => 'بازیابی رمز عبور با موفقیت انجام شد.',
-                'type' => Notification::PASSWORD_CHANGED,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$user]));
+            $type = Notification::PASSWORD_CHANGED;
+            $text = 'بازیابی رمز عبور با موفقیت انجام شد.';
+            Notification::make(
+                $type,
+                $text,
+                $user->id,
+                $text,
+                get_class($user),
+                $user->id,
+                false
+            );
             return response()->json(['data' => 'پسورد با موفقیت تغییر کرد'], 200);
         } else {
             return response()->json(['data' => 'کاربر یافت نشد'], 404);
@@ -356,22 +359,22 @@ class UserController extends Controller
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectAvatar($request, $user->profile);
         if ($request->get('accepted')) {
-            $user->notifs()->create([
-                'text' => 'تصویر پروفایل شما تایید شد.',
-                'type' => Notification::AVATAR_ACCEPTED,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'تصویر پروفایل شما تایید شد.';
+            $type = Notification::AVATAR_ACCEPTED;
         } else {
-            $user->notifs()->create([
-                'text' => 'تصویر پروفایل شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پروفایل خود را ارسال
-کنید.',
-                'type' => Notification::AVATAR_DENIED,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'تصویر پروفایل شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پروفایل خود را ارسال
+کنید.';
+            $type = Notification::AVATAR_DENIED;
         }
-        Notification::sendNotificationToUsers(collect([$user]));
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($user),
+            $user->id,
+            false
+        );
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
@@ -381,77 +384,78 @@ class UserController extends Controller
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectBackground($request, $user->profile);
         if ($request->get('accepted')) {
-            $user->notifs()->create([
-                'text' => 'تصویر پس زمینه شما تایید شد.',
-                'type' => Notification::BG_ACCEPTED,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'تصویر پس زمینه شما تایید شد.';
+            $type = Notification::BG_ACCEPTED;
         } else {
-            $user->notifs()->create([
-                'text' => 'تصویر پس زمینه شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پروفایل خود را ارسال
-کنید.',
-                'type' => Notification::BG_DENIED,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'تصویر پس زمینه شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پس زمینه خود را ارسال
+کنید.';
+            $type = Notification::BG_DENIED;
         }
-        Notification::sendNotificationToUsers(collect([$user]));
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($user),
+            $user->id,
+            false
+        );
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
-    public function acceptOrRejectNationalCard(AcceptOrRejectProjectRequest $request, $id)
+    public
+    function acceptOrRejectNationalCard(AcceptOrRejectProjectRequest $request, $id)
     {
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectNationalCard($request, $user->profile);
         if ($request->get('accepted')) {
-            $user->notifs()->create([
-                'text' => 'تصویر کارت ملی شما تایید شد.',
-                'type' => Notification::NATIONAL_ACCEPTED,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'تصویر کارت ملی شما تایید شد.';
+            $type = Notification::NATIONAL_ACCEPTED;
         } else {
-            $user->notifs()->create([
-                'text' => 'تصویر کارت ملی شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر پروفایل خود را ارسال
-کنید.',
-                'type' => Notification::NATIONAL_DENIED,
-                'user_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'تصویر کارت ملی شما رد شد . لطفا این راهنما را مطالعه کنید و سپس تصویر کارت ملی خود را ارسال
+کنید.';
+            $type = Notification::NATIONAL_DENIED;
         }
-        Notification::sendNotificationToUsers(collect([$user]));
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($user),
+            $user->id,
+            false
+        );
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
-    public function acceptOrRejectSheba(AcceptOrRejectProjectRequest $request, $id)
+    public
+    function acceptOrRejectSheba(AcceptOrRejectProjectRequest $request, $id)
     {
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
         $updated = $this->userRepository->acceptOrRejectSheba($request, $user->profile);
         if ($request->accepted) {
-            $user->notifs()->create([
-                'text' => 'شماره ی شبا شما تایید شد',
-                'type' => Notification::SHEBA_ACCEPTED,
-                'user_id' => $user->id,
-                'notifiable_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'شماره ی شبا شما تایید شد';
+            $type = Notification::SHEBA_ACCEPTED;
         } else {
-            $user->notifs()->create([
-                'text' => 'شماره شبا شما رد شد. لطفا این راهنما را مطالعه و سپس شماره شبای خود را وارد کنید.',
-                'type' => Notification::SHEBA_DENIED,
-                'user_id' => $user->id,
-                'notifiable_id' => $user->id,
-                'image_id' => null
-            ]);
+            $text = 'شماره شبا شما رد شد. لطفا این راهنما را مطالعه و سپس شماره شبای خود را وارد کنید.';
+            $type = Notification::SHEBA_DENIED;
         }
-        Notification::sendNotificationToUsers(collect([$user]));
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($user),
+            $user->id,
+            false,
+        );
         return response()->json(['message' => $updated ? 'تایید شد' : 'تایید نشد'], 200);
     }
 
-    public function updateBackground(UpdateAvatarRequest $request)
+    public
+    function updateBackground(UpdateAvatarRequest $request)
     {
         /** @var User $user */
         $user = auth()->user();
@@ -459,7 +463,8 @@ class UserController extends Controller
         return new AssetResource($background);
     }
 
-    public function updateNationalCard(UpdateAvatarRequest $request)
+    public
+    function updateNationalCard(UpdateAvatarRequest $request)
     {
         /** @var User $user */
         $user = auth()->user();
@@ -467,7 +472,8 @@ class UserController extends Controller
         return new AssetResource($nationalCard);
     }
 
-    public function updateSheba(UpdateShebaRequest $request)
+    public
+    function updateSheba(UpdateShebaRequest $request)
     {
         /** @var User $user */
         $user = auth()->user();
@@ -475,14 +481,16 @@ class UserController extends Controller
         return response()->json(['message' => $updated ? 'آپدیت شد' : 'متاسفانه خطایی رخ داده است'], $updated ? 200 : 500);
     }
 
-    public function skills()
+    public
+    function skills()
     {
         /** @var User $auth */
         $auth = auth()->user();
         return new SkillCollectionResource($auth->skills()->get());
     }
 
-    public function addSkill(AddUserSkillRequest $request)
+    public
+    function addSkill(AddUserSkillRequest $request)
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -492,7 +500,8 @@ class UserController extends Controller
         return new SkillCollectionResource($auth->skills()->get());
     }
 
-    public function removeSkill(RemoveUserSkillRequest $request)
+    public
+    function removeSkill(RemoveUserSkillRequest $request)
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -501,7 +510,8 @@ class UserController extends Controller
         return new SkillCollectionResource($auth->skills()->get());
     }
 
-    public function authCanDoProjects()
+    public
+    function authCanDoProjects()
     {
         $projects = $this->userRepository->authCanDoProjects();
         return response()->json([
@@ -509,19 +519,22 @@ class UserController extends Controller
         ]);
     }
 
-    public function authProjects()
+    public
+    function authProjects()
     {
         $auth = auth()->user();
         return $this->userProjects($auth->id);
     }
 
-    public function authAllProjects()
+    public
+    function authAllProjects()
     {
         $auth = auth()->user();
         return $this->userAllProjects($auth->id);
     }
 
-    public function userProjects($id)
+    public
+    function userProjects($id)
     {
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
@@ -552,13 +565,17 @@ class UserController extends Controller
         if ($auth->can('follow-user', $user)) {
             if (!$user->isFollowedBy($auth)) {
                 $auth->follow($user);
-                $user->notifs()->create([
-                    'text' => $auth->first_name . ' ' . $auth->last_name . ' شما را دنبال می کند.',
-                    'type' => Notification::FOLLOW,
-                    'user_id' => $user->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$user]));
+                $type = Notification::FOLLOW;
+                $text = $auth->first_name . ' ' . $auth->last_name . ' شما را دنبال می کند.';
+                Notification::make(
+                    $type,
+                    $text,
+                    $user->id,
+                    $text,
+                    get_class($auth),
+                    $auth->id,
+                    false
+                );
             }
             return response()->json(['success' => 'با موفقیت انجام شد!'], 200);
         } else {
@@ -581,37 +598,43 @@ class UserController extends Controller
         }
     }
 
-    public function authFollowers()
+    public
+    function authFollowers()
     {
         /** @var User $auth */
         $auth = auth()->user();
         return new UserCollectionResource($this->userRepository->userFollowers($auth->id));
     }
 
-    public function authFollowings()
+    public
+    function authFollowings()
     {
         /** @var User $auth */
         $auth = auth()->user();
         return new UserCollectionResource($this->userRepository->userFollowings($auth->id));
     }
 
-    public function userFollowers($id)
+    public
+    function userFollowers($id)
     {
         return new UserCollectionResource($this->userRepository->userFollowers($id));
     }
 
-    public function userFollowings($id)
+    public
+    function userFollowings($id)
     {
         return new UserCollectionResource($this->userRepository->userFollowers($id));
     }
 
-    public function authReceivedRequests()
+    public
+    function authReceivedRequests()
     {
         $auth = auth()->user();
         return $this->userReceivedRequests($auth->id);
     }
 
-    public function userReceivedRequests($id)
+    public
+    function userReceivedRequests($id)
     {
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
@@ -625,13 +648,15 @@ class UserController extends Controller
         ];
     }
 
-    public function authSentRequests()
+    public
+    function authSentRequests()
     {
         $auth = auth()->user();
         return $this->userSentRequests($auth->id);
     }
 
-    public function userSentRequests($id)
+    public
+    function userSentRequests($id)
     {
         /** @var User $user */
         $user = $this->userRepository->findOneOrFail($id);
@@ -664,7 +689,8 @@ class UserController extends Controller
 
     }
 
-    public function sendRequest(SendRequestForProjectRequest $sendRequestForProjectRequest)
+    public
+    function sendRequest(SendRequestForProjectRequest $sendRequestForProjectRequest)
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -717,18 +743,22 @@ class UserController extends Controller
         }
         $request = $this->userRepository->sendRequest($sendRequestForProjectRequest);
         $user = $project->employer()->get();
-        $project->notifications()->create([
-            'text' => $auth->first_name . ' ' . $auth->last_name . ' به پروژه ی شما پیشنهاد داد',
-            'type' => Notification::PROJECT,
-            'user_id' => $user->id,
-            'notifiable_id' => $project->id,
-            'image_id' => null
-        ]);
-        Notification::sendNotificationToUsers(collect([$user]));
+        $text = $auth->username . ' به پروژه ی شما پیشنهاد داد';
+        $type = Notification::PROJECT;
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($project),
+            $project->id,
+            false,
+        );
         return new RequestResource($request);
     }
 
-    private function createTransactionForSendRequest(User $user, int $amount, Project $project, SendRequestForProjectRequest $requestForProjectRequest)
+    private
+    function createTransactionForSendRequest(User $user, int $amount, Project $project, SendRequestForProjectRequest $requestForProjectRequest)
     {
         $invoice = new Invoice;
         $amount = (int)($amount / 10);
@@ -776,7 +806,8 @@ class UserController extends Controller
         })->pay()->toJson();
     }
 
-    public function getSecurePayments(SendRequestForProjectRequest $request)
+    public
+    function getSecurePayments(SendRequestForProjectRequest $request)
     {
         $securePayments = $request->get('new_secure_payments');
         if (!is_null($securePayments)) {
@@ -794,7 +825,8 @@ class UserController extends Controller
         }
     }
 
-    public function getReceivedRequest($id)
+    public
+    function getReceivedRequest($id)
     {
         $request = $this->userRepository->getReceivedRequest($id);
         return new RequestResource($request);
@@ -814,13 +846,15 @@ class UserController extends Controller
 //        }
 //    }
 
-    public function authProjectRequests($id)
+    public
+    function authProjectRequests($id)
     {
         $requests = $this->userRepository->authProjectRequests($id);
         return new RequestCollectionResource($requests->sortByDesc('created_at'));
     }
 
-    public function authAcceptOrRejectProjectRequest(AcceptOrRejectProjectRequest $projectRequest, $id, Request $request)
+    public
+    function authAcceptOrRejectProjectRequest(AcceptOrRejectProjectRequest $projectRequest, $id, Request $request)
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -836,18 +870,22 @@ class UserController extends Controller
         }
         $request = $this->userRepository->authAcceptOrRejectProjectRequest($projectRequest, $project, $request);
         $user = $project->employer()->get();
-        $project->notifications()->create([
-            'text' => 'پیشنهاد انجام پروژه به ' . $auth->first_name . ' ' . $auth->last_name . 'ارسال شد',
-            'type' => Notification::PROJECT,
-            'user_id' => $user->id,
-            'notifiable_id' => $project->id,
-            'image_id' => null
-        ]);
-        Notification::sendNotificationToUsers(collect([$user]));
+        $text = 'پیشنهاد انجام پروژه به ' . $auth->username . 'ارسال شد';
+        $type = Notification::PROJECT;
+        Notification::make(
+            $type,
+            $text,
+            $user->id,
+            $text,
+            get_class($project),
+            $project->id,
+            false,
+        );
         return new RequestResource($request);
     }
 
-    public function freelancerGetAcceptProjectRequest(Project $project, AcceptFreelancerRequest $accept)
+    public
+    function freelancerGetAcceptProjectRequest(Project $project, AcceptFreelancerRequest $accept)
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -877,47 +915,52 @@ class UserController extends Controller
             $request = $this->userRepository->freelancerAcceptOrRejectRequest($projectRequest, $project, $request);
             $user = $project->employer()->get();
             if ($projectRequest->accepted) {
-                $project->notifications()->create([
-                    'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' پذیرفته شد',
-                    'type' => Notification::PROJECT,
-                    'user_id' => $user->id,
-                    'notifiable_id' => $project->id,
-                    'image_id' => null
-                ]);
-                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                    $q->where('name', '=', 'admin');
-                })->get();
-                foreach ($admins as $admin) {
-                    $project->notifications()->create([
-                        'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' پذیرفته شد',
-                        'type' => Notification::ADMIN_PROJECT,
-                        'user_id' => $admin->id,
-                        'image_id' => null
-                    ]);
-                    Notification::sendNotificationToUsers(collect([$admin]));
-                }
+                $text = 'پیشنهاد انجام پروژه توسط ' . $auth->username . ' پذیرفته شد';
+                $type = Notification::PROJECT;
+                Notification::make(
+                    $type,
+                    $text,
+                    $user->id,
+                    $text,
+                    get_class($user),
+                    $user->id,
+                    false,
+                );
+                $text = 'پیشنهاد انجام پروژه توسط ' . $auth->username . ' پذیرفته شد';
+                $type = Notification::ADMIN_PROJECT;
+                Notification::make(
+                    $type,
+                    $text,
+                    null,
+                    $text,
+                    get_class($user),
+                    $user->id,
+                    true,
+                );
             } else {
-                $project->notifications()->create([
-                    'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' رد شد',
-                    'type' => Notification::PROJECT,
-                    'user_id' => $user->id,
-                    'notifiable_id' => $project->id,
-                    'image_id' => null
-                ]);
+                $text = 'پیشنهاد انجام پروژه توسط ' . $auth->username . ' رد شد';
+                $type = Notification::PROJECT;
+                Notification::make(
+                    $type,
+                    $text,
+                    $user->id,
+                    $text,
+                    get_class($user),
+                    $user->id,
+                    false,
+                );
+                $text = 'پیشنهاد انجام پروژه توسط ' . $auth->username . ' رد شد';
+                $type = Notification::ADMIN_PROJECT;
+                Notification::make(
+                    $type,
+                    $text,
+                    null,
+                    $text,
+                    get_class($user),
+                    $user->id,
+                    true,
+                );
             }
-        }
-        Notification::sendNotificationToUsers(collect([$user]));
-        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-            $q->where('name', '=', 'admin');
-        })->get();
-        foreach ($admins as $admin) {
-            $project->notifications()->create([
-                'text' => 'پیشنهاد انجام پروژه توسط ' . $auth->first_name . ' ' . $auth->last_name . ' رد شد',
-                'type' => Notification::ADMIN_PROJECT,
-                'user_id' => $admin->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$admin]));
         }
         return new AcceptFreelancerResource($request);
     }
@@ -943,108 +986,124 @@ class UserController extends Controller
             return response()->json(['errors' => ['sheba' => ['موجودی کیف پول شما کمتر از مبلغ مورد نیاز می باشد!']]], 422);
         }
         if ($this->userRepository->withdraw($request->amount)) {
-            $user->notifs()->create([
-                'text' => 'درخواست برداشت به مبلغ ' . $request->amount . ' برای ادمین ارسال شد.',
-                'type' => Notification::WITHDRAW,
-                'user_id' => $user->id,
-                'notifiable_id' => $user->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$user]));
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
-            foreach ($admins as $admin) {
-                $user->notifs()->create([
-                    'text' => "$user->first_name $user->last_name درخواست برداشت مبلغ $$request->amount را دارد. ",
-                    'type' => Notification::WITHDRAW,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+            $text = 'درخواست برداشت به مبلغ ' . $request->amount . ' برای ادمین ارسال شد.';
+            $type = Notification::WITHDRAW;
+            Notification::make(
+                $type,
+                $text,
+                $user->id,
+                $text,
+                get_class($user),
+                $user->id,
+                false,
+            );
+            $text = "$user->username درخواست برداشت مبلغ $request->amount را دارد. ";
+            $type = Notification::WITHDRAW;
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($user),
+                $user->id,
+                true,
+            );
             return response()->json(['success' => true, 'message' => 'درخواست برداشت با موفقیت ثبت شد'], 200);
         } else {
             return response()->json(['success' => false, 'message' => 'متاسفانه خطایی رخ داده است.'], 500);
         }
     }
 
-    public function withdraws()
+    public
+    function withdraws()
     {
         /** @var User $auth */
         $auth = auth()->user();
         return new WithdrawRequestCollectionResource($auth->withdraws);
     }
 
-    public function showWithdraw(WithdrawRequest $withdraw)
+    public
+    function showWithdraw(WithdrawRequest $withdraw)
     {
         return new WithdrawRequestResource($withdraw);
     }
 
-    public function wallet()
+    public
+    function wallet()
     {
         $wallet = $this->userRepository->wallet();
         return new WalletResource($wallet);
     }
 
-    public function ownLikedPosts()
+    public
+    function ownLikedPosts()
     {
         $posts = $this->userRepository->ownLikedPosts();
         return new PostCollectionResource($posts);
     }
 
-    public function userLikedPosts($id)
+    public
+    function userLikedPosts($id)
     {
         $posts = $this->userRepository->userLikedPosts($id);
         return new PostCollectionResource($posts);
     }
 
-    public function ownSavedPosts()
+    public
+    function ownSavedPosts()
     {
         $posts = $this->userRepository->ownSavedPosts();
         return new PostCollectionResource($posts);
     }
 
-    public function userSavedPosts($id)
+    public
+    function userSavedPosts($id)
     {
         $posts = $this->userRepository->userSavedPosts($id);
         return new PostCollectionResource($posts);
     }
 
-    public function ownBookmarkedPosts()
+    public
+    function ownBookmarkedPosts()
     {
         $posts = $this->userRepository->ownBookmarkedPosts();
         return new PostCollectionResource($posts);
     }
 
-    public function ownFollowingsPosts()
+    public
+    function ownFollowingsPosts()
     {
         $posts = $this->userRepository->ownFollowingsPosts();
         return new PostCollectionResource($posts);
     }
 
-    public function userBookmarkedPosts($id)
+    public
+    function userBookmarkedPosts($id)
     {
         $posts = $this->userRepository->userBookmarkedPosts($id);
         return new PostCollectionResource($posts);
     }
 
-    public function authPortfolios()
+    public
+    function authPortfolios()
     {
         return new PortfolioCollectionResource($this->userRepository->authPortfolios());
     }
 
-    public function userPortfolios($id)
+    public
+    function userPortfolios($id)
     {
         return new PortfolioCollectionResource($this->userRepository->userPortfolios($id));
     }
 
-    public function blocked()
+    public
+    function blocked()
     {
         return new UserCollectionResource($this->userRepository->blockedUsers());
     }
 
-    public function blockAndUnblockUser($id)
+    public
+    function blockAndUnblockUser($id)
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -1057,7 +1116,8 @@ class UserController extends Controller
         }
     }
 
-    public function disputes()
+    public
+    function disputes()
     {
         /** @var Collection $disputes */
         $disputes = $this->userRepository->disputes();
@@ -1071,7 +1131,8 @@ class UserController extends Controller
         ];
     }
 
-    public function notifications()
+    public
+    function notifications()
     {
         if (\request()->get('page')) {
             $page = $this->getPage();
@@ -1084,12 +1145,14 @@ class UserController extends Controller
         return new NotificationCollectionResource($notifications);
     }
 
-    public function seenNotifications()
+    public
+    function seenNotifications()
     {
         return $this->userRepository->seenNotifications();
     }
 
-    public function adminBlockUser($id)
+    public
+    function adminBlockUser($id)
     {
         $user = $this->userRepository->findOneOrFail($id);
         $user->update([
@@ -1098,7 +1161,8 @@ class UserController extends Controller
         return new UserResource($user);
     }
 
-    public function setPackage(SetPackageRequest $request)
+    public
+    function setPackage(SetPackageRequest $request)
     {
         /** @var User $user */
         $user = auth()->user();
@@ -1148,31 +1212,34 @@ class UserController extends Controller
             /** @var Wallet $wallet */
             $wallet = $user->wallet;
             $wallet->forceWithdraw($monthly ? $monthlyPrice : $yearlyPrice);
-            $user->notifs()->create([
-                'text' => 'ارتقای عضویت شما به پکیج ' . $package->title . ' با موفقیت انجام شد.',
-                'type' => Notification::PACKAGE,
-                'user_id' => $user->id,
-                'notifiable_id' => $user->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$user]));
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
-            foreach ($admins as $admin) {
-                $user->notifs()->create([
-                    'text' => "$user->first_name $user->last_name پکیج خود را ارتقا داد.",
-                    'type' => Notification::PACKAGE,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+            $text = 'ارتقای عضویت شما به پکیج ' . $package->title . ' با موفقیت انجام شد.';
+            $type = Notification::PACKAGE;
+            Notification::make(
+                $type,
+                $text,
+                $user->id,
+                $text,
+                get_class($user),
+                $user->id,
+                false,
+            );
+            $text = "$user->username پکیج خود را ارتقا داد.";
+            $type = Notification::PACKAGE;
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($user),
+                $user->id,
+                true,
+            );
             return response()->json(['data' => 'ارتقای عضویت انجام شد'], 200);
         }
     }
 
-    public function search(HttpRequest $request)
+    public
+    function search(HttpRequest $request)
     {
         $term = $request->get('term');
         $limit = $this->getLimit();
@@ -1201,7 +1268,8 @@ class UserController extends Controller
         return new UserCollectionResource($this->paginateCollection($users, $limit));
     }
 
-    public function conversations()
+    public
+    function conversations()
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -1209,7 +1277,8 @@ class UserController extends Controller
         return new ConversationCollectionResource($conversations->sortByDesc('created_at'));
     }
 
-    public function sendMessage(SendMessageRequest $request)
+    public
+    function sendMessage(SendMessageRequest $request)
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -1256,7 +1325,8 @@ class UserController extends Controller
         return new MessageResource($message);
     }
 
-    public function user(HttpRequest $request)
+    public
+    function user(HttpRequest $request)
     {
         $limit = $this->getLimit();
         $page = $this->getPage();
@@ -1305,7 +1375,8 @@ class UserController extends Controller
         return new UserCollectionResource($this->paginateCollection($users, $limit));
     }
 
-    public function securePaymentsToOther()
+    public
+    function securePaymentsToOther()
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -1313,7 +1384,8 @@ class UserController extends Controller
         return new SecurePaymentCollectionResource($payments);
     }
 
-    public function securePaymentsToMe()
+    public
+    function securePaymentsToMe()
     {
         /** @var User $auth */
         $auth = auth()->user();
@@ -1321,7 +1393,8 @@ class UserController extends Controller
         return new SecurePaymentCollectionResource($payments);
     }
 
-    public function verifyEmail($id, $hash): JsonResponse
+    public
+    function verifyEmail($id, $hash): JsonResponse
     {
         /** @var User $user */
         $user = User::find($id);
@@ -1343,7 +1416,8 @@ class UserController extends Controller
         }
     }
 
-    public function paymentHistories()
+    public
+    function paymentHistories()
     {
         $histories = $this->userRepository->paymentHistories()->sort(function ($a, $b) {
             return strtotime($a->created_at) < strtotime($b->created_at);
@@ -1351,47 +1425,56 @@ class UserController extends Controller
         return new PaymentHistoryCollectionResource($histories);
     }
 
-    public function monthlyIncome()
+    public
+    function monthlyIncome()
     {
         return $this->userRepository->monthlyIncome();
     }
 
-    public function ownCreatedSecurePayments()
+    public
+    function ownCreatedSecurePayments()
     {
         return new SecurePaymentCollectionResource($this->userRepository->ownCreatedSecurePayments());
     }
 
-    public function ownAcceptedSecurePayments()
+    public
+    function ownAcceptedSecurePayments()
     {
         return new SecurePaymentCollectionResource($this->userRepository->ownAcceptedSecurePayments());
     }
 
-    public function ownPayedSecurePayments()
+    public
+    function ownPayedSecurePayments()
     {
         return $this->userRepository->ownPayedSecurePayments();
     }
 
-    public function ownFreeSecurePayments()
+    public
+    function ownFreeSecurePayments()
     {
         return new SecurePaymentCollectionResource($this->userRepository->ownFreeSecurePayments());
     }
 
-    public function showNotification(Notification $notification)
+    public
+    function showNotification(Notification $notification)
     {
         return new NotificationResource($notification);
     }
 
-    public function seenMessage(SeenMessageRequest $seenMessageRequest)
+    public
+    function seenMessage(SeenMessageRequest $seenMessageRequest)
     {
         return $this->userRepository->seenMessage($seenMessageRequest);
     }
 
-    public function seenConversation(SeenConversationRequest $seenConversationRequest)
+    public
+    function seenConversation(SeenConversationRequest $seenConversationRequest)
     {
         return $this->userRepository->seenConversation($seenConversationRequest);
     }
 
-    public function authNewMessagesCount()
+    public
+    function authNewMessagesCount()
     {
         return $this->userRepository->authNewMessagesCount();
     }

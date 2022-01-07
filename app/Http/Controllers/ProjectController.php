@@ -140,28 +140,31 @@ class ProjectController extends Controller
             $wallet = $user->wallet;
             $wallet->setBalance((int) ($balance - $price));
 //            broadcast(new NewConversationEvent($user, $conversation));
-            $project->notifications()->create([
-                'text' => 'پروژه '. $project->title .' ایجاد شد.',
-                'type' => Notification::PROJECT,
-                'user_id' => $user->id,
-                'notifiable_id' => $project->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$user]));
-            $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                $q->where('name', '=', 'admin');
-            })->get();
             $employer = $project->employer;
             $freelancer = $project->freelancer;
-            foreach ($admins as $admin) {
-                $project->notifications()->create([
-                    'text' => "$employer->first_name $employer->last_name پروژه ی $project->title را برای $freelancer->first_name $freelancer->last_name ایجاد کرد.",
-                    'type' => Notification::ADMIN_PROJECT,
-                    'user_id' => $admin->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$admin]));
-            }
+            $type = Notification::PROJECT;
+            $text =  'پروژه '. $project->title .' ایجاد شد.';
+            Notification::make(
+                $type,
+                $text,
+                $employer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false
+            );
+
+            $type = Notification::PROJECT;
+            $text =  "$employer->first_name $employer->last_name پروژه ی $project->title را برای $freelancer->first_name $freelancer->last_name ایجاد کرد.";
+            Notification::make(
+                $type,
+                $text,
+                null,
+                $text,
+                get_class($project),
+                $project->id,
+                true
+            );
             return new ProjectResource($project);
         }
     }
@@ -427,26 +430,28 @@ class ProjectController extends Controller
                 return response()->json(['errors' => ['project' => ['پرداخت های امن تایید نشده یا پرداخت نشده یا آزاد نشده دارید']]], 422);
             } else {
                 $finished = $this->projectRepository->finishProject($project);
-                $project->notifications()->create([
-                    'text' => $auth->first_name . '' . $auth->last_name . 'برای پروژه ' . $project->title . ' اتمام پروژه را تایید کرده است.',
-                    'type' => Notification::ِDISPUTE,
-                    'user_id' => $project->freelancer->id,
-                    'notifiable_id' => $project->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$project->freelancer]));
-                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                    $q->where('name', '=', 'admin');
-                })->get();
-                foreach ($admins as $admin) {
-                    $project->notifications()->create([
-                        'text' => $auth->first_name . '' . $auth->last_name . 'برای پروژه ' . $project->title . ' اتمام پروژه را تایید کرده است.',
-                        'type' => Notification::ADMIN_PROJECT,
-                        'user_id' => $admin->id,
-                        'image_id' => null
-                    ]);
-                    Notification::sendNotificationToUsers(collect([$admin]));
-                }
+                $type = Notification::ِDISPUTE;
+                $text = $auth->first_name . '' . $auth->last_name . 'برای پروژه ' . $project->title . ' اتمام پروژه را تایید کرده است.';
+                Notification::make(
+                    $type,
+                    $text,
+                    $project->freelancer->id,
+                    $text,
+                    get_class($project),
+                    $project->id,
+                    false
+                );
+                $type = Notification::ADMIN_PROJECT;
+                $text = $auth->first_name . '' . $auth->last_name . 'برای پروژه ' . $project->title . ' اتمام پروژه را تایید کرده است.';
+                Notification::make(
+                    $type,
+                    $text,
+                    null,
+                    $text,
+                    get_class($project),
+                    $project->id,
+                    true
+                );
                 return response()->json(['finished' => $finished], 200);
             }
         } else {
@@ -510,23 +515,28 @@ class ProjectController extends Controller
         if($freelancer) {
             /** @var User $emp */
             $emp = $project->employer()->get();
-            $emp->notifs()->create([
-                'text' => 'پروژه ی '. $project->title .' برای '. $freelancer->first_name . ' ' . $freelancer->last_name .' ایجاد شد.',
-                'type' => Notification::PROJECT,
-                'user_id' => $emp->id,
-                'notifiable_id' => $emp->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$emp]));
-
-            $freelancer->notifs()->create([
-                'text' => $emp->first_name . ' ' . $emp->last_name . ' پروژه ی ' . $project->title . ' را برای شما ایجاد کرده است',
-                'type' => Notification::PROJECT,
-                'user_id' => $freelancer->id,
-                'notifiable_id' => $freelancer->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$freelancer]));
+            $type = Notification::PROJECT;
+            $text =  'پروژه ی '. $project->title .' برای '. $freelancer->first_name . ' ' . $freelancer->last_name .' ایجاد شد.';
+            Notification::make(
+                $type,
+                $text,
+                $emp->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false
+            );
+            $type = Notification::PROJECT;
+            $text =  $emp->first_name . ' ' . $emp->last_name . ' پروژه ی ' . $project->title . ' را برای شما ایجاد کرده است';
+            Notification::make(
+                $type,
+                $text,
+                $freelancer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false
+            );
         }
     }
 
@@ -535,12 +545,17 @@ class ProjectController extends Controller
         $auth = auth()->user();
         if($auth->can('send-cancel-request-project', $project)) {
             $rp = new CancelProjectRequestResource($this->projectRepository->sendCancelProjectRequest($project));
-            $emails = collect();
-            $emails->add($project->employer);
-            $users = collect();
-            $users->add($project->employer);
-            Notification::sendNotificationToAll($emails, 'درخواست لغو پروژه '. $project->title .' ایجاد شد', 'درخواست لغو پروژه '. $project->title .' ایجاد شد', null);
-            Notification::sendNotificationToUsers($users);
+            $type = Notification::PROJECT;
+            $text =  'درخواست لغو پروژه '. $project->title .' ایجاد شد';
+            Notification::make(
+                $type,
+                $text,
+                $project->employer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false
+            );
             return $rp;
         } else {
             return $this->accessDeniedResponse();

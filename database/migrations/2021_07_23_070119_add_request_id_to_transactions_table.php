@@ -14,7 +14,7 @@ class AddRequestIdToTransactionsTable extends Migration
     public function up()
     {
         Schema::table('transactions', function (Blueprint $table) {
-            $table->foreignId('request_id')->nullable()->references('id')->on('requests')->onDelete('set null');
+//            $table->foreignId('request_id')->nullable()->references('id')->on('requests')->onDelete('set null');
         });
     }
 

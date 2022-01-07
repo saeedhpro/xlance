@@ -68,18 +68,17 @@ class PortfolioController extends Controller
         if ($request->has('new_images')) {
             $portfolio = $this->syncImages($request, $portfolio);
         }
-        $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-            $q->where('name', '=', 'admin');
-        })->get();
-        foreach ($admins as $admin) {
-            $auth->notifs()->create([
-                'text' => 'کاربر ' . $auth->first_name . ' ' . $auth->last_name . ' نمونه کار جدید ایجاد کرد.',
-                'type' => Notification::ADMIN_PORTFOLIO_CREATED,
-                'user_id' => $admin->id,
-                'image_id' => null
-            ]);
-            Notification::sendNotificationToUsers(collect([$admin]));
-        }
+        $type = Notification::ADMIN_PORTFOLIO_CREATED;
+        $text = 'کاربر ' . $auth->first_name . ' ' . $auth->last_name . ' نمونه کار جدید ایجاد کرد.';
+        Notification::make(
+            $type,
+            $text,
+            null,
+            $text,
+            get_class($portfolio),
+            $portfolio->id,
+            true
+        );
         return new PortfolioResource($portfolio);
     }
 

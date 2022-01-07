@@ -13,7 +13,7 @@ class ProfileObserver
     /**
      * Handle the Profile "created" event.
      *
-     * @param  \App\Models\Profile  $profile
+     * @param \App\Models\Profile $profile
      * @return void
      */
     public function created(Profile $profile)
@@ -24,7 +24,7 @@ class ProfileObserver
     /**
      * Handle the Profile "updated" event.
      *
-     * @param  \App\Models\Profile  $profile
+     * @param \App\Models\Profile $profile
      * @return void
      */
     public function updated(Profile $profile)
@@ -39,32 +39,26 @@ class ProfileObserver
             $profile->sheba_accepted !== 1 &&
             $profile->national_card_accepted === 1;
         $role = Role::findByName('freelancer', 'web');
-        if($validated) {
+        if ($validated) {
             $profile->user->assignRole($role);
         }
-        $body = 'کابر ' . $user->username . ' ویرایش شد';
-        $admins = User::all()->filter(function (User $u){
-            return $u->hasRole('admin');
-        })->pluck('id');
-        $ids = collect($admins->values());
-        foreach ($ids as $id) {
-            $user->notifs()->create(array(
-                'text' => 'کاربر ' . $user->username . ' تایید شد',
-                'type' => Notification::EMPLOYER,
-                'user_id' => $id,
-                'image_id' => $profile->avatar ? $profile->avatar->id : null
-            ));
-        }
-        $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-        $users = User::all()->whereIn('id', $ids->toArray());
-        Notification::sendNotificationToAll($emails->toArray(),  $body, $body, $body);
-        Notification::sendNotificationToUsers($users);
+        $text = 'کاربر ' . $user->username . ' تایید شد';
+        $type = Notification::EMPLOYER;
+        Notification::make(
+            $type,
+            $text,
+            null,
+            $text,
+            get_class($user),
+            $user->id,
+            true
+        );
     }
 
     /**
      * Handle the Profile "deleted" event.
      *
-     * @param  \App\Models\Profile  $profile
+     * @param \App\Models\Profile $profile
      * @return void
      */
     public function deleted(Profile $profile)
@@ -75,7 +69,7 @@ class ProfileObserver
     /**
      * Handle the Profile "restored" event.
      *
-     * @param  \App\Models\Profile  $profile
+     * @param \App\Models\Profile $profile
      * @return void
      */
     public function restored(Profile $profile)
@@ -86,7 +80,7 @@ class ProfileObserver
     /**
      * Handle the Profile "force deleted" event.
      *
-     * @param  \App\Models\Profile  $profile
+     * @param \App\Models\Profile $profile
      * @return void
      */
     public function forceDeleted(Profile $profile)

@@ -103,32 +103,31 @@ class PostRepository extends BaseRepository implements PostInterface
         if($attributes['image_id']) {
             $post = $this->setImage($post, $attributes['image_id']);
         }
-        $post->notifications()->create(array(
-            'text' => 'پست ایجاد شد',
-            'type' => Notification::POST,
-            'user_id' => $user->id,
-            'image_id' => $post->media ? $post->media->id : null
-        ));
         $users = $user->followers->pluck('id');
-        $admins = User::all()->filter(function (User $u){
-            return $u->hasRole('admin');
-        })->pluck('id');
-        $ids = Collection::make($users);
-        $ids->push($admins->values());
-        $emails = User::all()->whereIn('id', $ids->toArray())->pluck('email');
-        $users = User::all()->whereIn('id', $ids->toArray());
-        foreach ($users as $user) {
-            $user->notifs()->create(array(
-                'text' => 'پست ایجاد شد',
-                'type' => Notification::POST,
-                'user_id' => $user->id,
-                'notifiable_id' => $post->id,
-                'notifiable_type' => get_class($post),
-                'image_id' => $post->media ? $post->media->id : null
-            ));
+        foreach ($users as $id) {
+            $text = 'پست ایجاد شد';
+            $type = Notification::POST;
+            Notification::make(
+                $type,
+                $text,
+                $id,
+                $text,
+                get_class($post),
+                $post->id,
+                false
+            );
         }
-        Notification::sendNotificationToAll($emails->toArray(), 'پست ایجاد شد', 'پست ایجاد شد', null);
-        Notification::sendNotificationToUsers($users);
+        $text = 'پست ایجاد شد';
+        $type = Notification::POST;
+        Notification::make(
+            $type,
+            $text,
+            null,
+            $text,
+            get_class($post),
+            $post->id,
+            true
+        );
         return $post;
     }
 
@@ -170,14 +169,17 @@ class PostRepository extends BaseRepository implements PostInterface
         $auth = auth()->user();
         $post = $this->findOneOrFail($id);
         $auth->like($post);
-        $post->notifications()->create([
-            'text' => $auth->first_name . '' . $auth->last_name . ' پست شما را پسندید',
-            'type' => Notification::POST,
-            'user_id' => $post->user->id,
-            'notifiable_id' => $post->id,
-            'image_id' => $post->media ? $post->media->id : null
-        ]);
-        Notification::sendNotificationToUsers(collect([$post->user]));
+        $text = $auth->first_name . '' . $auth->last_name . ' پست شما را پسندید';
+        $type = Notification::POST;
+        Notification::make(
+            $type,
+            $text,
+            $post->user->id,
+            $text,
+            get_class($post),
+            $post->id,
+            false
+        );
         return true;
     }
 

@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
+use phpDocumentor\Reflection\Types\This;
 
 class Notification extends Model
 {
@@ -61,6 +62,7 @@ class Notification extends Model
         'title',
         'text',
         'type',
+        'is_admin',
         'user_id',
         'image_id',
         'notifiable_id',
@@ -156,17 +158,20 @@ class Notification extends Model
 
         return curl_exec($ch);
     }
+
     public static function sendNotificationToAll($emails, $title, $content, $customContent)
     {
         SendPushNotification::dispatch($title, $content, $customContent, $emails);
         return true;
     }
+
     public static function sendNotificationToUsers(Collection $users)
     {
         foreach ($users as $user){
             Notification::broadcast($user);
         }
     }
+
     public static function sendNotificationToUser($user)
     {
         Notification::broadcast($user);
@@ -181,6 +186,7 @@ class Notification extends Model
         $nonce = Notification::getNonce();
         broadcast(new NewNotificationEvent($user, $count, $nonce));
     }
+
     public static function getNonce(): int
     {
         try {
@@ -189,5 +195,18 @@ class Notification extends Model
             $nonce = 1024;
         }
         return $nonce;
+    }
+
+    public static function make($type, $text, $userID, $title, $notifiableType, $notifiableID, $isAdmin)
+    {
+        return Notification::create([
+            'type' => $type,
+            'text' => $text,
+            'user_id' => $userID,
+            'title' => $title,
+            'notifiable_type' => $notifiableType,
+            'notifiable_id' => $notifiableID,
+            'is_admin' => $isAdmin,
+        ]);
     }
 }

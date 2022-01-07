@@ -6,6 +6,7 @@ use App\Models\Article;
 use App\Models\Portfolio;
 use App\Models\Post;
 use App\Models\Profile;
+use App\Models\Project;
 use App\Models\Story;
 use App\Models\User;
 use App\Observers\ProfileObserver;
@@ -42,6 +43,8 @@ class AppServiceProvider extends ServiceProvider
             'article' => Article::class,
             'portfolio' => Portfolio::class,
             'profile' => Profile::class,
+            'project' => Project::class,
+            'user' => User::class,
         ]);
         if($this->app->environment('production')) {
             URL::forceScheme('https');

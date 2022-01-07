@@ -110,29 +110,30 @@ class DisputeController extends Controller
                 ]);
                 $nonce = $this->getNonce();
                 broadcast(new NewMessageNotificationEvent($freelancer, $freelancer->newMessagesCount(), $nonce));
-                $project->notifications()->create([
-                    'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.',
-                    'type' => Notification::ِDISPUTE,
-                    'user_id' => $employer->id,
-                    'notifiable_id' => $project->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$freelancer]));
-                $admins = User::query()->with('roles')->whereHas('roles', function ($q) {
-                    $q->where('name', '=', 'admin');
-                })->get();
-                $freelancer = $project->freelancer;
-                foreach ($admins as $admin) {
-                    $project->notifications()->create([
-                        'text' => $freelancer->first_name . '' . $freelancer->last_name . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.',
-                        'type' => Notification::ADMIN_PROJECT,
-                        'user_id' => $admin->id,
-                        'image_id' => null
-                    ]);
-                    Notification::sendNotificationToUsers(collect([$admin]));
-                }
+                $text = $freelancer->username . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.';
+                $type = Notification::ِDISPUTE;
+                Notification::make(
+                    $type,
+                    $text,
+                    $employer->id,
+                    $text,
+                    get_class($project),
+                    $project->id,
+                    false,
+                );
+                $text = $freelancer->username . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.';
+                $type = Notification::ADMIN_PROJECT;
+                Notification::make(
+                    $type,
+                    $text,
+                    null,
+                    $text,
+                    get_class($project),
+                    $project->id,
+                    true,
+                );
             } else {
-                $message = Message::create([
+                Message::create([
                     'user_id' => $auth->id,
                     'type' => Message::TEXT_TYPE,
                     'conversation_id' => $ec->id,
@@ -141,14 +142,17 @@ class DisputeController extends Controller
                 ]);
                 $nonce = $this->getNonce();
                 broadcast(new NewMessageNotificationEvent($employer, $employer->newMessagesCount(), $nonce));
-                $project->notifications()->create([
-                    'text' => $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.',
-                    'type' => Notification::ِDISPUTE,
-                    'user_id' => $freelancer->id,
-                    'notifiable_id' => $project->id,
-                    'image_id' => null
-                ]);
-                Notification::sendNotificationToUsers(collect([$employer]));
+                $text = $employer->first_name . '' . $employer->last_name . 'برای پروژه ' . $project->title . ' اختلاف ایجاد کرده است.';
+                $type = Notification::ِDISPUTE;
+                Notification::make(
+                    $type,
+                    $text,
+                    $freelancer->id,
+                    $text,
+                    get_class($project),
+                    $project->id,
+                    false,
+                );
             }
             return new DisputeResource($dispute);
         } else {
@@ -208,24 +212,28 @@ class DisputeController extends Controller
             ]);
             $project->save();
             $this->cancelSecurePayments($project);
-            $notificationBody = 'ادمین حل اختلاف پروژه ی '. $project->title .' را تمام کرد';
-            $project->notifications()->create(array(
-                'text' => $notificationBody,
-                'type' => Notification::PROJECT,
-                'user_id' => $project->freelancer->id,
-                'image_id' => $project->freelancer->profile->avatar ? $project->freelancer->profile->avatar->id : null
-            ));
-            $notificationBody = 'ادمین حل اختلاف پروژه ی '. $project->title .' را تمام کرد';
-            $project->notifications()->create(array(
-                'text' => $notificationBody,
-                'type' => Notification::PROJECT,
-                'user_id' => $project->employer->id,
-                'image_id' => $project->employer->profile->avatar ? $project->employer->profile->avatar->id : null
-            ));
-            Notification::sendNotificationToAll([$project->freelancer->email], $notificationBody, $notificationBody, null);
-            Notification::sendNotificationToAll([$project->employer->email], $notificationBody, $notificationBody, null);
-            Notification::sendNotificationToUsers(collect([$project->freelancer]));
-            Notification::sendNotificationToUsers(collect([$project->employer]));
+            $text = 'ادمین حل اختلاف پروژه ی '. $project->title .' را تمام کرد';
+            $type = Notification::PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                $project->freelancer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false,
+            );
+            $text = 'ادمین حل اختلاف پروژه ی '. $project->title .' را تمام کرد';
+            $type = Notification::PROJECT;
+            Notification::make(
+                $type,
+                $text,
+                $project->employer->id,
+                $text,
+                get_class($project),
+                $project->id,
+                false,
+            );
             return new DisputeResource($dispute);
         } else {
             return $this->accessDeniedResponse();
