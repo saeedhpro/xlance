@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Notification;
 use App\Models\Profile;
 use App\Models\User;
+use App\Observers\NotificationObserver;
 use App\Observers\ProfileObserver;
 use App\Observers\UserObserver;
 use Illuminate\Auth\Events\Registered;
@@ -33,5 +35,6 @@ class EventServiceProvider extends ServiceProvider
     {
         User::observe(UserObserver::class);
         Profile::observe(ProfileObserver::class);
+        Notification::observe(NotificationObserver::class);
     }
 }
